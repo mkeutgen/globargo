@@ -270,8 +270,8 @@ add_region <- function(df) {
 # For instance, if p = 0.20, every 5 T, with T a typical timescale, a carbon subduction event happens.
 # To get a flux in (mg C m^2 / day ) f
 # How to get f from carb_prob_df ? If T is 1 week, then 0.20 * 1/7
-carb_prob_df <- readRDS("data/pred_grid_carb_prob.Rds")
-pred_grid <- readRDS("data/pred_grid_poc_season.Rds")
+carb_prob_df <- readRDS("/data/GLOBARGO/src/data/pred_grid_carb_prob.Rds")
+pred_grid <- readRDS("/data/GLOBARGO/src/data/pred_grid_poc_season.Rds")
 
 carb_prob_df$LONGITUDE <- carb_prob_df$lon_bin
 carb_prob_df$LATITUDE <- carb_prob_df$lat_bin
@@ -285,7 +285,6 @@ merged_df <- merge(
 
 # Estimating POC export :
 # Read in the carb probability data (if not already loaded)
-carb_prob_df <- readRDS("data/pred_grid_carb_prob.Rds")
 carb_prob_df$LONGITUDE <- carb_prob_df$lon_bin
 carb_prob_df$LATITUDE <- carb_prob_df$lat_bin
 
@@ -332,6 +331,8 @@ sensitivity_region <- expand.grid(
   )
 
 annual_export_region_list <- list()
+sensitivity_results <- list()
+
 # Loop over each T value
 for (i in seq_along(w_values)) {
   w_val <- w_values[i]
@@ -369,11 +370,13 @@ for (i in seq_along(w_values)) {
               export_annual_mg_50years_bl = sum(export_season_mg_50years_bl, na.rm = TRUE),
               export_annual_mg_50years_up = sum(export_season_mg_50years_up, na.rm = TRUE)) %>%
     ungroup()
-  # total export per seasons
+  # total export per regions
   annual_export_df <- add_region(annual_export_df)  
   annual_export_region_list[[i]] <- annual_export_df %>% group_by(region) %>% summarize(
-    total_export_mg_bl = sum(export_annual_mg_bl,na.rm = T)*1e-18,
-    total_export_mg_up = sum(export_annual_mg_up,na.rm = T)*1e-18
+    total_export_Pg_bl = sum(export_annual_mg_bl,na.rm = T)*1e-18,
+    total_export_Pg_up = sum(export_annual_mg_up,na.rm = T)*1e-18,
+    fifty_yrs_export_Pg_bl = sum(export_annual_mg_50years_bl)*1e-18,
+    fifty_yrs_export_Pg_up = sum(export_annual_mg_50years_up)*1e-18
   )
   
   
@@ -399,14 +402,16 @@ for (i in seq_along(w_values)) {
   
 }
 
-names(annual_export_region_list) <- w_values <- c(20,50,100,200,300,400,500)
+sensitivity_results
 
-export_region <- annual_export_region_list %>% bind_rows(.id = "w")  %>% group_by(region) %>%
-  summarize(min_export = min(total_export_mg_bl,total_export_mg_up),
-            max_export = max(total_export_mg_bl,total_export_mg_up)
-            )  
-saveRDS(object = export_region,file = "data/sensitivity_region.Rds")
-saveRDS(object = sensitivity_results,file = "data/sensitivity_res.Rds")
+names(annual_export_region_list) <- w_values <- c(20,50,100,200,300,400,500)
+annual_export_region_list
+export_region <- annual_export_region_list %>% bind_rows(.id = "w")  
+export_region <- export_region %>% pivot_longer(cols=!c("region","w"))
+export_region <- export_region %>% group_by(name,w) %>% mutate(global_export=sum(value))
+
+saveRDS(object = export_region,file = "../data/sensitivity_region.Rds")
+saveRDS(object = sensitivity_results,file = "../data/sensitivity_res.Rds")
 # Print the sensitivity results
 print(sensitivity_results)
 

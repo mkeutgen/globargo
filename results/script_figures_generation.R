@@ -29,15 +29,17 @@ conflict_prefer("filter", "dplyr")
 
 Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
 setwd("/data/GLOBARGO/globargo_repo/scripts/")
-df_argo_clean <- read_csv("data/df_argo_loc.csv")
-df_complete_clean <- read_csv("data/manually_verified_physical_subd_events.csv")
-df_carbon_clean <- read_csv("data/df_carbon_subduction_anom_with_poc_fromgali.csv")
+df_argo_clean <- read_csv("../data/df_argo_loc.csv")
+df_complete_clean <- read_csv("../data/manually_verified_physical_subd_events.csv")
+df_carbon_clean <- read_csv("../data/df_carbon_subduction_anom.csv")
 
-all_anomalies <- read_csv("/data/detected_physical_subd_events.csv")
+df_carbon_clean_poc <- read_csv("../data/df_carbon_subduction_anom_with_poc_fromgali.csv")
+
+all_anomalies <- read_csv("../data/detected_physical_subd_events.csv")
 
 
 
-df_carbon_with_poc <- read_csv("/data/GLOBARGO/src/data/df_carbon_subduction_anom_with_poc_fromgali.csv")
+df_carbon_with_poc <- read_csv("../data/df_carbon_subduction_anom_with_poc_fromgali.csv")
 
 
 ########################
@@ -48,12 +50,13 @@ df_carbon_with_poc <- read_csv("/data/GLOBARGO/src/data/df_carbon_subduction_ano
 # D gam carb
 ########################
 
+stipple_resolution <- 5
 
 # GAM 
-pred_full_subd <- readRDS("data/pred_full_subd025.Rds")
+pred_full_subd <- readRDS("../data/pred_full_subd025.Rds")
 pred_full_subd$proportion <- ifelse(pred_full_subd$proportion < 0.001,NA, pred_full_subd$proportion)
 
-pred_full_carb <- readRDS("data/pred_full_carb025.Rds")
+pred_full_carb <- readRDS("../data/pred_full_carb025.Rds")
 pred_full_carb$proportion <- ifelse(pred_full_carb$proportion < 0.0005,NA, pred_full_carb$proportion)
 
 
@@ -338,12 +341,12 @@ bottom_row <- map_subd_full | map_carb_full            # two distinct legends
 fig_final <- top_row / bottom_row +
   plot_layout(heights = c(1, 1),axis_titles = "collect")            # equal height rows
 
-ggsave(fig_final,filename = "pubfig/figure1_subd_gam.png",width = 16.18,height = 10)
+ggsave(fig_final,filename = "../pubfig/figure1_subd_gam.png",width = 16.18,height = 10)
 
 
 ########################
 ## Figure 2 : seasonality,  
-# Python
+# see Python notebook.
 ########################
 
 ##################################
@@ -370,13 +373,16 @@ df_carbon_clean <- add_month_region(df_carbon_clean)
 
 
 pres_data <- df_complete_clean %>% filter(!is.na(region), !is.na(month))
+pres_data$PRES_ADJUSTED %>% median()
 #pres_data$PRES_ADJUSTED <- pres_data$PRES_ADJUSTED-200
 
 
 carbon_pres_data <- df_carbon_clean %>% filter(!is.na(region), !is.na(month))
 #carbon_pres_data$PRES_ADJUSTED <- carbon_pres_data$PRES_ADJUSTED-200
+carbon_pres_data$PRES_ADJUSTED %>% median()
 
-
+carbon_pres_data$PRES_ADJUSTED %>% quantile()
+pres_data$PRES_ADJUSTED %>% quantile(0.8)
 
 pres_data$Type <- "Subduction"
 carbon_pres_data$Type <- "Carbon Subduction"
@@ -386,42 +392,62 @@ combined_data <- bind_rows(
   carbon_pres_data %>% mutate(Type = "Carbon Subduction Events")
 )
 
-# Plot overlaid density plots
-subd_distrib_plot <- ggplot(combined_data, aes(x = PRES_ADJUSTED, fill = Type,color = Type)) +
+p_gt500 <- combined_data %>%                                        # your tibble
+  group_by(region, Type) %>%                             # Region × event class
+  summarise(
+    n_total  = n(),                                      # denominator
+    n_ge500  = sum(PRES_ADJUSTED >= 500),                # numerator
+    p_ge500  = mean(PRES_ADJUSTED >= 500),               # ≡ n_ge500 / n_total
+    .groups = "drop"
+  ) %>% 
+  arrange(region, desc(p_ge500))                         # optional
+
+combined_data_copy <- combined_data
+combined_data_copy$region <- "Global"
+
+combined_data_global <- rbind(combined_data_copy,combined_data) 
+combined_data_global$region <- factor(combined_data_global$region,levels=c("Global","North Atlantic","North Pacific","Northern Tropics",
+                                                                           "Southern Tropics","Southern Ocean"))
+region_levels <- levels(combined_data_global$region)
+region_labs <- setNames(
+  paste0(letters[seq_along(region_levels)], " \u2022 ", region_levels),
+  region_levels
+)
+
+subd_distrib_plot <- ggplot(combined_data_global,
+                            aes(x = PRES_ADJUSTED,
+                                fill = Type, colour = Type)) +
   geom_density(alpha = 0.3, linewidth = 1.2) +
   scale_color_viridis_d() +
   scale_fill_viridis_d() +
-  facet_wrap(. ~ region, scales = "free_y", ncol = 2,axes="all_x") +
+  facet_wrap(
+    . ~ region,
+    scales = "free_x",
+    ncol   = 2,
+    labeller = labeller(region = region_labs)   # ← HERE
+  ) +
   theme_minimal() +
   theme(
-    strip.text = element_text(size = 15, face = "bold"),
-    axis.text.x = element_text(size = 15, angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 15),
-    axis.title = element_text(size = 16),
-    legend.title = element_blank(),
-    legend.text = element_text(size = 15)
+    strip.text      = element_text(size = 15, face = "bold"),
+    axis.text.x     = element_text(size = 15, angle = 45, hjust = 1),
+    axis.text.y     = element_text(size = 15),
+    axis.title.y    = element_text(size = 16),
+    title           = element_text(size = 15),
+    legend.position = "bottom"
   ) +
   labs(
-    x = "Depth (m)",
-    y = "Estimated Density",
-    title = "Carbon subduction happens mostly between 200 and 500 meters"
-  )+  scale_x_continuous(
-    breaks = seq(0, 800, by = 200),
-    labels = seq(200, 1000, by = 200)
-  )+ 
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 15, face = "bold"),
-    axis.text.x = element_text(size = 15,angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 15),
-    axis.title.y = element_text(size = 16),
-    title = element_text(size=15),
-    legend.position = "bottom"
-  )+  
+    x     = "Depth (m)",
+    y     = "Estimated Density",
+    title = "Carbon subduction happens mostly between 200 m and 500 m"
+  ) +
+  scale_x_continuous(
+    breaks  = seq(0, 800, by = 200),
+    labels  = seq(200, 1000, by = 200)
+  ) +
   guides(fill = "none")
 
 # PDFs in mean seq time : 
-mean_seq_df <- read_csv("data/df_meanseq.csv")
+mean_seq_df <- read_csv("../data/df_meanseq.csv")
 mean_seq_df <- mean_seq_df %>% select(!depth) %>%
   na.omit() %>% filter(mean_seq_time > 0)
 
@@ -577,10 +603,10 @@ cdf_combined <- (subd_cdf_time + subd_cdf_depth) +
 # ------------------------------------------------------------------
 # 5.  Export
 # ------------------------------------------------------------------
-ggsave("pubfig/fig3_cdf_time_vs_depth.png",
+ggsave("../pubfig/fig3_cdf_time_vs_depth.png",
        cdf_combined,
        width  = 13,   # adjust to journal’s column width
-       height = 5.5,
+       height = 10,
        dpi    = 300)
 
 
@@ -618,17 +644,17 @@ subd_pdf_depth <- ggplot(combined_data,
 # ──────────────────────────────────────────────────────────────────
 # 3.  Combine ― share a single legend
 # ──────────────────────────────────────────────────────────────────
-pdf_combined <- (subd_pdf_time + subd_pdf_depth) +
+pdf_combined <- subd_distrib_plot +
   patchwork::plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
 
 # ──────────────────────────────────────────────────────────────────
 # 4.  Save the figure
 # ──────────────────────────────────────────────────────────────────
-ggsave("pubfig/fig3_pdf_time_vs_depth.png",
+ggsave("../pubfig/fig3_pdf_time.png",
        pdf_combined,
        width  = 13,   # same dimensions as CDF version
-       height = 5.5,
+       height = 10,
        dpi    = 300)
 
 
@@ -642,7 +668,7 @@ pdf_combined_region <- (subd_pdf_time_region + subd_pdf_depth_region) +
   patchwork::plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
 
-ggsave("pubfig/fig3_SI_pdf_time_vs_depth_region.png",
+ggsave("../pubfig/fig3_SI_pdf_time_vs_depth_region.png",
        pdf_combined_region,
        width  = 13,   # same dimensions as CDF version
        height = 5.5,
@@ -655,7 +681,7 @@ subd_cdf_depth_region <- subd_cdf_depth + facet_wrap(. ~ region, axes = "all")+t
 cdf_combined_region <- (subd_cdf_time_region + subd_cdf_depth_region) +
   patchwork::plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
-ggsave("pubfig/fig3_SI_cdf_time_vs_depth_region.png",
+ggsave("../pubfig/fig3_SI_cdf_time_vs_depth_region.png",
        cdf_combined_region,
        width  = 13,   # same dimensions as CDF version
        height = 5.5,
@@ -664,8 +690,8 @@ ggsave("pubfig/fig3_SI_cdf_time_vs_depth_region.png",
 ###############################################
 ## Figure 4 : EKE map combined with SI vs MLI 
 ###############################################
-pred_grid <- readRDS("data/pred_grid_EKE_bl_fromQiu2018.Rds")
-
+# data too big for github, can be downloaded on zenodo.
+pred_grid <- readRDS("/data/GLOBARGO/src/data/pred_grid_EKE_bl_fromQiu2018.Rds")
 
 format_eke_labels <- function(bins) {
   labels <- gsub("[\\(\\)\\[\\]]", "", bins)  # Remove all types of brackets
@@ -673,11 +699,65 @@ format_eke_labels <- function(bins) {
   return(labels)
 }
 
+breaks_eke_bl <- c(0, 1e-4, 1e-3, 2.5e-3, 5e-3, 7.5e-3, 1e-2, 2.5e-2, 5e-2, 7.5e-2, 1e-1, 1)
+
+pred_grid$EKE_bl_hat_binned <- cut(pred_grid$EKE_bl_hat_gaussian_log,
+                                   breaks = breaks_eke_bl,
+                                   include.lowest = TRUE)
+
+pred_grid$EKE_unbl_hat_binned <- cut(pred_grid$EKE_unbl_hat_gaussian_log,
+                                     breaks = breaks_eke_bl,
+                                     include.lowest = TRUE)
+
+
+
 pred_grid <- pred_grid %>% na.omit() 
 
+bin_levels <- cut(breaks_eke_bl[-1],               # cut the interval end-points
+                  breaks_eke_bl,
+                  include.lowest = TRUE) %>% 
+  levels()
+
+pred_grid <- pred_grid %>% 
+  mutate(
+    EKE_bl_hat_binned  = factor(EKE_bl_hat_binned,   levels = bin_levels),
+    EKE_unbl_hat_binned= factor(EKE_unbl_hat_binned, levels = bin_levels)
+  )
+
+scale_EKE <- scale_fill_viridis_d(
+  option = "viridis",
+  name   = "EKE (m² s⁻²)",
+  limits = bin_levels,          # guarantees the same palette order
+  labels = eke_labels_bl,       # the list you already prepared
+  guide  = guide_legend(reverse = TRUE, na.translate = FALSE)
+)
 # Define global scales for probability contours (same as before)
 global_contour_breaks <- c(0.05,0.10,0.20,0.30,0.40,0.60)
 global_contour_labels <- as.character(round(global_contour_breaks * 100, 0))
+# 1. Aggregate Argo float locations to 5° bins for the season
+argo_bins <- df_argo_clean %>%
+  mutate(
+    lon_bin_stipple = floor(LONGITUDE / stipple_resolution) * stipple_resolution,
+    lat_bin_stipple = floor(LATITUDE / stipple_resolution) * stipple_resolution
+  ) %>%
+  group_by(lon_bin_stipple, lat_bin_stipple) %>%
+  summarize(count = n(), .groups = "drop")
+
+full_grid <- expand.grid(
+  lon_bin_stipple = seq(-180, 180, by = 5),
+  lat_bin_stipple = seq(-90, 90, by = 5)
+) %>%
+  as_tibble()
+
+# Left join the existing argo_bins to the full grid and replace NAs with 0
+argo_bins_full <- full_grid %>%
+  left_join(argo_bins, by = c("lon_bin_stipple", "lat_bin_stipple")) %>%
+  mutate(count = ifelse(is.na(count), 0, count))
+
+
+# 2. Identify undersampled areas (e.g., fewer than 5 profiles)
+undersampled <- argo_bins_full %>% filter(count < 1)
+
 
 undersampled_corners <- undersampled %>%
   rowwise() %>%
@@ -711,6 +791,27 @@ eke_labels_bl <- list(
   expression(10^-1),                     # 7.5·10⁻² – 10⁻¹
   expression(">"~1)                                  # ≥ 10⁻¹
 )
+
+pred_grid$EKE_unbl_hat_binned %>% unique()
+
+
+# eke_labels_unbl <- list(
+#   expression("<"~10^-4),                                      #  < 10⁻⁴
+#   expression(10^-3),                           # 10⁻⁴ – 10⁻³
+#   expression(2%*%10^-3),                     # 10⁻³ – 2.5·10⁻³
+#   expression(3%*%10^-3),                 # 2.5·10⁻³ – 5·10⁻³
+#   expression(4%*%10^-3),                 # 5·10⁻³ – 7.5·10⁻³
+#   expression(5%*%10^-3), 
+#   expression(6%*%10^-3),                     # 10⁻³ – 2.5·10⁻³
+#   expression(7%*%10^-3),                 # 2.5·10⁻³ – 5·10⁻³
+#   expression(8%*%10^-3),                 # 5·10⁻³ – 7.5·10⁻³
+#   expression(9%*%10^-3),                     # 7.5·10⁻³ – 10⁻²
+#   expression(10^-2),                     # 7.5·10⁻³ – 10⁻²
+#   expression(2.5%*%10^-2),                     # 7.5·10⁻³ – 10⁻²
+#   expression(10^-1)
+# )
+
+
 
 map_eke_bl <- ggplot() +
   ## (optional) light‑blue polar rectangles
@@ -768,7 +869,7 @@ map_eke_bl <- ggplot() +
   scale_y_continuous(breaks = ticks_y, labels = label_lat) +
   
   ## 3.  Labels
-  labs(title = "a • Balanced Eddy Kinetic Energy & Subduction Probability",
+  labs(title = "a • Balanced EKE & Subduction Probability",
        x = "Longitude", y = "Latitude") +
   
   ## 4.  Unified theme + legend style
@@ -783,8 +884,96 @@ map_eke_bl <- ggplot() +
   ## 4‑B.  Make the contour legend points larger
   guides(colour = guide_legend(override.aes = list(size = 4)))
 
+# map unbalanced
+map_eke_unbl <- ggplot() +
+  ## (optional) light‑blue polar rectangles
+  geom_rect(aes(xmin = -180, xmax = 180, ymin =  50, ymax =  90),
+            fill = "lightblue", colour = NA) +
+  geom_rect(aes(xmin = -180, xmax = 180, ymin = -90, ymax = -60),
+            fill = "lightblue", colour = NA) +
+  ## 1‑B. Subduction probability contours
+  new_scale_colour() +
+  geom_contour(data  = pred_full_subd,
+               aes(lon_bin, lat_bin, z = proportion,
+                   colour = factor(round(after_stat(level) * 100))),
+               breaks     = global_contour_breaks,
+               linewidth  = 1.4, alpha = 0.75, show.legend = TRUE) +
+  scale_colour_brewer(
+    palette = "Reds",
+    name    = "Physical Subduction\nprobability (%)",
+    limits  = global_contour_labels,
+    breaks  = global_contour_labels,
+    labels  = paste0(global_contour_labels, "%"),
+    guide   = guide_legend(
+      override.aes = list(  # what the legend key actually shows
+        fill      = NA,      # <- no rectangle
+        linewidth = 2        # thicker line so it remains visible
+      )
+    )
+  )+
+  ## 1‑A. Balanced EKE background
+  geom_tile(data = pred_grid,
+            aes(LON_num, LAT_num, fill = EKE_unbl_hat_binned),
+            alpha = 0.95) +
+  scale_fill_viridis_d(
+    option = "viridis",
+    name   = "Unbalanced EKE\n(m² s⁻²)",
+    guide  = guide_legend(reverse = TRUE, na.translate = FALSE),
+    labels = eke_labels_bl
+  ) +
+  geom_contour(data  = pred_full_subd,
+               aes(lon_bin, lat_bin, z = proportion,
+                   colour = factor(round(after_stat(level) * 100))),
+               breaks     = global_contour_breaks,
+               linewidth  = 1.4, alpha = 0.75, show.legend = FALSE)+
+  
+  ## 1‑C. Stippling undersampled 5°×5° cells
+  geom_point(data = undersampled_corners,
+             aes(LON, LAT), colour = "white",
+             size = 1.4, alpha = 0.6, shape = 20) +
+  
+  ## 1‑D. Coastlines
+  geom_sf(data = world, fill = "white", colour = "white", linewidth = 0.3) +
+  
+  ## 2.  Common axis / coordinate settings
+  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = FALSE) +
+  scale_x_continuous(breaks = ticks_x, labels = label_lon) +
+  scale_y_continuous(breaks = ticks_y, labels = label_lat) +
+  
+  ## 3.  Labels
+  labs(title = "b • Unbalanced EKE & Subduction Probability",
+       x = "Longitude", y = "Latitude") +
+  
+  ## 4.  Unified theme + legend style
+  theme_map(base_size = 18) +
+  theme(
+    legend.position   = "right",
+    legend.direction  = "horizontal",
+    legend.box        = "horizontal",
+    legend.key.width  = unit(2.2, "cm"),  # same as other plots
+    legend.key.height = unit(0.5, "cm")
+  ) +
+  ## 4‑B.  Make the contour legend points larger
+  guides(colour = guide_legend(override.aes = list(size = 4)))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Read data 
-df_full <- read_csv("data/dataframe_full_mld_and_n2.csv") 
+df_full <- read_csv("../data/dataframe_full_mld_and_n2.csv") 
 
 # Standardize the log-transformed predictors
 df_full <- df_full %>%
@@ -802,7 +991,7 @@ df_full$Anomaly_text <- ifelse(df_full$Anomaly == 1,"Subduction","No Subduction"
 density_mld <- ggplot(df_full, aes(x = log_cleaned_mld, fill = factor(Anomaly_text))) +
   geom_density(alpha = 0.7, color = "black", size = 1) +
   labs(
-    title = "b • Mixed-Layer Depth PDF",
+    title = "c • Mixed-Layer Depth PDF",
     x = "Log(Mixed-Layer Depth)",
     y = "Density",
     fill = ""
@@ -822,7 +1011,7 @@ density_mld <- ggplot(df_full, aes(x = log_cleaned_mld, fill = factor(Anomaly_te
 density_N2 <- ggplot(df_full, aes(x = log(cleaned_N2), fill = factor(Anomaly_text))) +
   geom_density(alpha = 0.7, color = "black", size = 1) +
   labs(
-    title = "c • Brunt-Väisälä PDF",
+    title = "d • Brunt-Väisälä PDF",
     x = "Log(Brunt-Väisälä Frequency)",
     y = "Density",
     fill = ""
@@ -845,21 +1034,25 @@ density_N2   <- density_N2   + theme_map()
 # 2.  Compose: map on top, two PDFs below
 #     (guides = "collect" merges identical legends into one row)
 # ──────────────────────────────────────────────────────────────────
-top_row <- map_eke_bl + theme_map() + theme(legend.position = "right")
+map_eke_bl_adj <- map_eke_bl + scale_EKE + theme_map() + theme(legend.position = "right")
+map_eke_unbl_adj <- map_eke_unbl + scale_EKE + theme_map() + theme(legend.position = "none")
+
+top_row <- (map_eke_bl_adj | map_eke_unbl_adj)+
+  plot_layout(guides = "collect")
 
 bottom_row <- (density_mld | density_N2) +
   plot_layout(guides = "collect")
 combined_fig <- top_row /
   bottom_row +
-  plot_layout(heights = c(1.3, 0.9)) 
+  plot_layout(heights = c(1.2, 0.8)) 
 
 # ──────────────────────────────────────────────────────────────────
 # 3.  Save
 # ──────────────────────────────────────────────────────────────────
-ggsave("pubfig/figure4_EKE_map_and_PDFs.png",
+ggsave("../pubfig/figure4_EKE_map_and_PDFs.png",
        combined_fig,
-       width  = 17,   # adjust to journal’s column width
-       height = 13,
+       width  = 18,   # adjust to journal’s column width
+       height = 10,
        dpi    = 400)
 
 # Figure 4 BIS, SI, KS distances,
@@ -950,11 +1143,271 @@ ggsave("pubfig/figure4_EKE_map_and_PDFs.png",
 # 
 # bootstrapped <- bootstrapped + theme_map()
 # 
-# ggsave("pubfig/bootstrapped_ks.png",bootstrapped,width = 8, height = 8, dpi = 300)
+# ggsave("../pubfig/bootstrapped_ks.png",bootstrapped,width = 8, height = 8, dpi = 300)
 
 # Figure 5 map of annual mean flux due to the ESP + characteristic velocity 
-sensitivity_results <- readRDS(file = "data/sensitivity_res.Rds")
-sensitivity_region <- readRDS(file = "data/sensitivity_region.Rds")
+sensitivity_results <- readRDS(file = "../data/sensitivity_res.Rds")
+sensitivity_region <- readRDS(file = "../data/sensitivity_region.Rds")
+
+sensitivity_region <- sensitivity_region %>% mutate(
+  Metric = case_when(
+    grepl("fifty_yrs", name) ~ "Export Sequestered for >50 yrs",
+    grepl("total", name) ~ "Total export",
+    TRUE ~ name
+  ),
+  Export_Type = case_when(
+    grepl("_bl$", name) ~ "Baseline",
+    grepl("_up$", name) ~ "Upper",
+    TRUE ~ "Other"
+  )
+)
+
+w200_df <- sensitivity_region %>% group_by(region,Metric) %>% filter(w == 200) %>% filter(Export_Type == "Baseline")
+
+pacific_trop <- w200_df %>%
+  select(region,Metric,value)  %>%
+  filter(region %in% c("North Pacific", "Northern Tropics", "Southern Tropics")) %>%
+  group_by(Metric) %>%
+  summarise(
+    value = sum(value, na.rm = TRUE),
+
+    .groups = "drop"
+  ) %>%
+  mutate(region = "North Pacific & Tropics")
+
+other_regions <- w200_df %>%
+  filter(!region %in% c("North Pacific", "Northern Tropics", "Southern Tropics",NA)) %>% select(region,Metric,value)
+
+
+central_df <- bind_rows(pacific_trop,other_regions) %>%
+  add_row(
+    region      = "Global",
+    Metric      = "Total export",
+    value         = 0.051115258      # ← your “value”
+  ) %>% add_row(
+    region      = "Global",
+    Metric      = "Export Sequestered for >50 yrs",
+    value         = 0.014390463      # ← your “value”
+  )
+
+sensitivity_region <- sensitivity_region %>% group_by(region,Metric) %>% mutate(min_export = min(value),
+                                                        max_export = max(value),
+                                                        mid_point = (min_export+max_export)/2) %>% ungroup()
+
+
+sensitivity_region_sel <- sensitivity_region %>% select(region,Metric,min_export,max_export) %>%
+  unique()
+
+sensitivity_region_sel
+
+sensitivity_region_sel %>% group_by(Metric) %>% summarize(global_min = sum(min_export),global_max=sum(max_export))
+global_data <- data.frame(
+  region = rep("Global", 2),
+  Metric = c("Export Sequestered for >50 yrs","Total export"),
+  min_export = c(0.00144,0.00511),
+  max_export = c(0.0706, 0.283)
+)
+
+combined_data <- bind_rows(sensitivity_region_sel, global_data)
+
+pacific_tropics_combined <- combined_data %>%
+  filter(region %in% c("North Pacific", "Northern Tropics", "Southern Tropics")) %>%
+  group_by(Metric) %>%
+  summarise(
+    min_export = sum(min_export, na.rm = TRUE),
+    max_export = sum(max_export, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(region = "North Pacific & Tropics")
+
+# Keep other regions as they are
+other_regions <- combined_data %>%
+  filter(!region %in% c("North Pacific", "Northern Tropics", "Southern Tropics",NA))
+
+# Combine the summed Pacific & Tropics with other regions
+final_aggregated_data <- bind_rows(other_regions, pacific_tropics_combined)
+final_aggregated_data$mid <- (final_aggregated_data$max_export + final_aggregated_data$min_export)/2
+final_aggregated_data
+
+# Add central, best estimate (w = 200 m/day, no remin )
+final_aggregated_data <- full_join(final_aggregated_data,central_df)
+
+esp_plot <- ggplot(
+  final_aggregated_data,
+  aes(
+    x= region,           # x
+    Mean,             # bar mid-point
+    ymin = min_export,
+    ymax = max_export,
+    y  = value,
+    color = Metric)
+) + geom_point(position = position_dodge2(width = 0.8, preserve = "single"),size=4)+
+  geom_errorbar(
+    width    = 0.8,
+    position = position_dodge2(width = 0.6, preserve = "single")
+  ) + scale_color_manual(
+    values = c(
+      "Total export"                       = "#404788FF",  # teal-ish
+      "Export Sequestered for >50 yrs"     = "#55C667FF"),
+    name = NULL
+  )+
+  ## SAME y-axis scale as esp_plot
+  scale_y_continuous(
+    breaks = c(0,0.1,0.2,0.3),limits=c(0,0.3)) +
+  
+  labs(
+    title = "a • Export of the Eddy Subduction Pump",
+    x     = NULL,y = "Export Rate (Pg C year⁻¹)" ) +
+  
+  theme_map(base_size = 18)  + theme_bw() +
+  theme(
+    panel.border    = element_rect(colour = "black", fill = NA, size = 0.6),
+    axis.ticks      = element_line(colour = "black", size = 0.3),
+    axis.text       = element_text(size = 18 * 0.8),
+    plot.title      = element_text(hjust = 0.5, face = "bold",
+                                   size  = 18 * 1.05,
+                                   margin = margin(b = 6)),
+    legend.position = "bottom",
+    legend.text     = element_text(size = 18 * 0.8),
+    legend.key.height = unit(0.5, "cm"),
+    legend.key.width  = unit(2.2 ,  "cm"),
+    plot.margin       = margin(2, 2, 2, 2),
+    axis.text.x       = element_text(angle = 45, hjust = 1),  # tilt if names are long
+  )
+
+# File too large for github
+merged_df<- readRDS("/data/GLOBARGO/src/data/merged_dataset_poc_estim.Rds")
+
+merged_df$LATITUDE %>% summary()
+
+
+# POC flux assuming T = 4 days (mean speed of 50 m/s)
+merged_df <- merged_df %>% mutate(poc_flux20w_bl = poc_bl * proportion * 20/200,  # lower bound
+                                  poc_flux20w_up = poc_up * proportion * 20/200,
+                                  poc_flux200w_bl = poc_bl * proportion * 200/200,
+                                  poc_flux500w_bl = poc_bl * proportion * 500/200,
+                                  poc_flux500w_up = poc_up * proportion * 500/200 # upper bound
+)
+
+
+
+
+merged_df$poc_flux200w_bl %>% summary()
+merged_df$poc_flux500w_bl %>% summary()
+# Get the daily mean fluxes
+annual_mean_region <- merged_df %>%
+  group_by(LONGITUDE, LATITUDE) %>%
+  summarize(poc_flux_annual = mean(poc_flux200w_bl, na.rm = TRUE))
+
+
+stipple_resolution <- 5
+
+argo_bins <- df_argo_clean %>%
+  mutate(
+    lon_bin_stipple = floor(LONGITUDE / stipple_resolution) * stipple_resolution,
+    lat_bin_stipple = floor(LATITUDE / stipple_resolution) * stipple_resolution
+  ) %>%
+  group_by(lon_bin_stipple, lat_bin_stipple) %>%
+  summarize(count = n(), .groups = "drop")
+
+full_grid <- expand.grid(
+  lon_bin_stipple = seq(-180, 175, by = stipple_resolution),
+  lat_bin_stipple = seq(-90, 90, by = stipple_resolution)
+) %>%
+  as_tibble()
+
+# Fill in any missing bins with count = 0
+argo_bins_full <- full_grid %>%
+  left_join(argo_bins, by = c("lon_bin_stipple", "lat_bin_stipple")) %>%
+  mutate(count = ifelse(is.na(count), 0, count))
+
+# 2. Identify undersampled areas (e.g., fewer than 1 profile)
+undersampled <- argo_bins_full %>% filter(count < 1)
+
+# 3. Generate corner points for each undersampled grid cell (4 corners per cell)
+undersampled_corners <- undersampled %>%
+  rowwise() %>%
+  mutate(corners = list(
+    data.frame(
+      LON = c(lon_bin_stipple,
+              lon_bin_stipple + stipple_resolution,
+              lon_bin_stipple,
+              lon_bin_stipple + stipple_resolution),
+      LAT = c(lat_bin_stipple,
+              lat_bin_stipple,
+              lat_bin_stipple + stipple_resolution,
+              lat_bin_stipple + stipple_resolution)
+    )
+  )) %>%
+  ungroup() %>%
+  unnest(corners)
+
+# 4. Filter the prediction grid to the desired season
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+annual_mean_region$poc_flux_annual_NA <- annual_mean_region$poc_flux_annual
+
+
+annual_mean_region$poc_flux_annual_NA <- ifelse(annual_mean_region$poc_flux_annual <= 0.05,NA,annual_mean_region$poc_flux_annual)
+
+poc_flux_map <- ggplot() +
+  ## 1 ─────────────── POC‑flux background ──────────────────────────
+  geom_tile(data = annual_mean_region,
+            aes(LONGITUDE, LATITUDE, fill = poc_flux_annual_NA),
+            alpha = 0.96) +
+  scale_fill_viridis_b(
+    name = "POC flux (mg C m⁻² day⁻¹)               ",
+    breaks = c(0.05,0.1,0.5,1,2,5,7.5),
+    limits = c(0.05,20 ),
+    oob = scales::squish, na.value = "white") +                       # your viridis / magma scale object
+  
+  ## 2 ─────────────── White contours (same variable) ───────────────
+  geom_contour(data = annual_mean_region,
+               aes(LONGITUDE, LATITUDE, z = poc_flux_annual,
+                   colour = after_stat(level)),
+               colour  = "white",   # fixed colour, so legend disabled below
+               alpha   = 0.30,
+               binwidth = 2.5,
+               show.legend = FALSE) +
+  
+  ## 3 ─────────────── Stippling for undersampled grid cells ────────
+  geom_point(data = undersampled_corners,
+             aes(LON, LAT),
+             colour = "red", size = 1.3, alpha = 0.7, shape = 20) +
+  
+  ## 4 ─────────────── Coastlines  ──────────────────────────────────
+  geom_sf(data = world, fill = "lightgrey", colour = "lightgrey",
+          linewidth = 0.3) +
+  
+  ## 5 ─────────────── Axes, ticks, labels, theme  ──────────────────
+  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = FALSE) +
+  scale_x_continuous(breaks = ticks_x, labels = label_lon) +
+  scale_y_continuous(breaks = ticks_y, labels = label_lat) +
+  labs(
+    title = "b • Average annual POC flux", # (assuming W = 50 m day⁻¹)
+    x = "Longitude", y = "Latitude", fill = "POC flux\n(mg C m⁻² day⁻¹)"
+  ) +
+  theme_map(base_size = 18) +
+  theme(
+    legend.position   = "bottom",
+    legend.direction  = "horizontal",
+    legend.box        = "horizontal",
+    legend.key.width  = unit(2.2, "cm"),
+    legend.key.height = unit(0.5, "cm"))
+
+shrink_margins <- theme(plot.margin = margin(5, 5, 5, 5))   # 5 pts all round
+esp_plot        <- esp_plot        + shrink_margins
+poc_flux_map    <- poc_flux_map    + shrink_margins
+
+
+
+combined_fig <- (esp_plot |  poc_flux_map) +
+  plot_layout(widths = c(1, 1.5),guides = "auto")
+
+
+ggsave(plot = combined_fig,
+       "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map.png",
+       width = 24,height = 10,dpi = 400)
 
 # Sensitivity of annual export to W : 
 df <- sensitivity_results
@@ -1009,7 +1462,7 @@ sensitivity_plot <- ggplot(df_plot,
     legend.key.height = unit(0.5, "cm")
   )
 
-ggsave(plot = sensitivity_plot,filename = "pubfig/fig5_SI_sensitivity_global_export.png",width = 15,height = 10)
+ggsave(plot = sensitivity_plot,filename = "../pubfig/fig5_SI_sensitivity_global_export.png",width = 15,height = 10)
 
 
 df_esp <- tibble(
@@ -1265,7 +1718,12 @@ esp_plot_log10 <- ggplot(
     legend.position   = "none",
     legend.direction  = "horizontal",
     legend.key.width  = unit(2.2, "cm"),
-    legend.key.height = unit(0.5, "cm")
+    legend.key.height = unit(0.5, "cm"),
+    axis.ticks      = element_line(colour = "black", size = 0.3),
+    axis.text       = element_text(size = base_size * 0.8),
+    plot.title      = element_text(hjust = 0.5, face = "bold",
+                                   size  = base_size * 1.05,
+                                   margin = margin(b = 6)),
   )
 
 
@@ -1407,16 +1865,16 @@ combined_fig_log <- (esp_plot_log10|  poc_flux_map )+
   plot_layout(widths = c(1, 2),guides = "auto")
 
 ggsave(plot = combined_fig,
-       "pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map.png",
+       "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map.png",
        width = 18,height = 10,dpi = 250)
 
 ggsave(plot = combined_fig_log,
-       "pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map_log.png",
+       "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map_log.png",
        width = 25,height = 10,dpi = 250)
 
 combined_fig <- esp_plot_log10 | poc_flux_map
 ggsave(plot = combined_fig,
-       "pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map_log10.png",
+       "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map_log10.png",
        width = 19,height = 10,dpi = 400)
 
 
