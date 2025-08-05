@@ -2,9 +2,6 @@
 # Loading Required Libraries
 #############################
 library(tidyverse)
-library(robustbase)
-library(gsw)
-library(zoo)
 library(oce)
 library(ggpubr)
 library(segmented)
@@ -28,7 +25,7 @@ conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 
 Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
-setwd("/data/GLOBARGO/globargo_repo/scripts/")
+setwd("scripts/")
 df_argo_clean <- read_csv("../data/df_argo_loc.csv")
 df_complete_clean <- read_csv("../data/manually_verified_physical_subd_events.csv")
 df_carbon_clean <- read_csv("../data/df_carbon_subduction_anom.csv")
@@ -352,7 +349,8 @@ ggsave(fig_final,filename = "../pubfig/figure1_subd_gam.png",width = 16.18,heigh
 ##################################
 ## Figure 3 : Depths of subduction
 ##################################
-df_complete_clean <- read_csv("data/df_eddy_subduction_anom.csv")
+
+df_complete_clean <- read_csv("../data/df_eddy_subduction_anom.csv")
 add_month_region <- function(df) {
   df %>%
     mutate(
@@ -437,12 +435,12 @@ subd_distrib_plot <- ggplot(combined_data_global,
   ) +
   labs(
     x     = "Depth (m)",
-    y     = "Estimated Density",
-    title = "Carbon subduction happens mostly between 200 m and 500 m"
+    y     = "Density",
+    title = ""
   ) +
   scale_x_continuous(
-    breaks  = seq(0, 800, by = 200),
-    labels  = seq(200, 1000, by = 200)
+    breaks  = seq(0, 1000, by = 200),
+    labels  = seq(0, 1000, by = 200)
   ) +
   guides(fill = "none")
 
