@@ -29,7 +29,7 @@ conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 
 Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
-setwd("/data/GLOBARGO/src/")
+
 # Read the data
 df_carbon_with_poc <- read_csv("data/df_carbon_subduction_anom_with_poc_fromgali.csv") %>% filter(integrated_poc > 0.01) 
 df_carbon_with_poc
@@ -37,7 +37,8 @@ df_argo_clean <- read_csv("data/df_argo_loc.csv")
 
 # Implementing Siegel's correction : 
 
-fseq_df <- read_csv("co2_sequestration_50years.csv")
+fseq_df <- read_csv("data/co2_sequestration_50years.csv")
+fseq_df$longitude %>% unique()
 fseq_df$fseq %>% summary()
 
 fseq_df <- fseq_df %>% na.omit()

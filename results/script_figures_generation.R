@@ -420,7 +420,6 @@ subd_distrib_plot <- ggplot(combined_data_global,
   scale_fill_viridis_d() +
   facet_wrap(
     . ~ region,
-    scales = "free_x",
     ncol   = 2,
     labeller = labeller(region = region_labs)   # ← HERE
   ) +
@@ -431,6 +430,7 @@ subd_distrib_plot <- ggplot(combined_data_global,
     axis.text.y     = element_text(size = 15),
     axis.title.y    = element_text(size = 16),
     title           = element_text(size = 15),
+    legend.text  =  element_text(size = 15),
     legend.position = "bottom"
   ) +
   labs(
@@ -569,7 +569,7 @@ subd_cdf_time <- ggplot(combined_data,
                      expand = expansion(mult = c(0, 0.02))) +
   scale_y_continuous(breaks = seq(0, 1, 0.2),
                      labels = scales::percent_format(accuracy = 1))+ 
-  base_cdf_theme+theme_map()
+  base_cdf_theme+theme_map(base_size = 16)
 
 # ------------------------------------------------------------------
 # 3.  ECDF by depth
@@ -586,7 +586,7 @@ subd_cdf_depth <- ggplot(combined_data,
                      expand = expansion(mult = c(0, 0.02))) +
   scale_y_continuous(breaks = seq(0, 1, 0.2),
                      labels = scales::percent_format(accuracy = 1)) +theme_map()+
-  base_cdf_theme+theme_map()
+  base_cdf_theme+theme_map(base_size = 16)
 
 # ------------------------------------------------------------------
 # 4.  Combine — one legend, two panels
@@ -620,7 +620,7 @@ subd_pdf_time <- ggplot(combined_data,
   scale_x_continuous(breaks = seq(0, 1200, 200),
                      limits = c(0, 1200),
                      expand = expansion(mult = c(0, 0.02))) +
-  base_cdf_theme+theme_map()
+  base_cdf_theme+theme_map(base_size = 16)
 
 # ──────────────────────────────────────────────────────────────────
 # 2.  PDF by depth
@@ -637,20 +637,18 @@ subd_pdf_depth <- ggplot(combined_data,
   scale_x_continuous(breaks = seq(200, 1000, 200),
                      limits = c(200, 1000),
                      expand = expansion(mult = c(0, 0.02))) +
-  base_cdf_theme+theme_map()
+  base_cdf_theme+theme_map(base_size = 16)
 
 # ──────────────────────────────────────────────────────────────────
 # 3.  Combine ― share a single legend
 # ──────────────────────────────────────────────────────────────────
-pdf_combined <- subd_distrib_plot +
-  patchwork::plot_layout(guides = "collect") &
-  theme(legend.position = "bottom")
+pdf_combined <- subd_distrib_plot +theme(legend.position = "bottom")
 
 # ──────────────────────────────────────────────────────────────────
 # 4.  Save the figure
 # ──────────────────────────────────────────────────────────────────
 ggsave("../pubfig/fig3_pdf_time.png",
-       pdf_combined,
+       subd_distrib_plot,
        width  = 13,   # same dimensions as CDF version
        height = 10,
        dpi    = 300)

@@ -28,16 +28,15 @@ conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 
 Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
-setwd("/data/GLOBARGO/src/")
 df_argo_clean <- read_csv("data/df_argo_loc.csv")
 df_complete_clean <- read_csv("data/df_eddy_subduction_anom.csv")
 df_carbon_clean <- read_csv("data/df_carbon_subduction_anom.csv")
 
-all_anomalies <- read_csv("/data/GLOBARGO/data/detected_events_abs_sal_var_v5.csv")
+all_anomalies <- read_csv("data/detected_events_abs_sal_var_v5.csv")
 
 
 
-df_carbon_with_poc <- read_csv("/data/GLOBARGO/src/data/df_carbon_subduction_anom_with_poc_fromgali.csv")
+df_carbon_with_poc <- read_csv("data/df_carbon_subduction_anom_with_poc_fromgali.csv")
 
 
 # --- Compute argo density per 1 degree bin
@@ -1926,8 +1925,19 @@ proportions_df <- combined_data %>%
 # Display the results
 print(proportions_df %>% filter(Type == "Carbon Subduction Events"))
 
+print(proportions_df %>% filter(Type == "Carbon Subduction Events"))
 
+# Compute proportion of events with PRES_ADJUSTED >= 300
+proportions_df_500 <- combined_data %>%
+  group_by(Type, region) %>%
+  summarize(
+    total_events = n(),
+    events_geq_500 = sum(PRES_ADJUSTED >= 500),
+    proportion = events_geq_500 / total_events
+  ) %>%
+  arrange(region, Type)
 
+proportions_df_500
 
 ggsave("figures/distrib_subd_histogram.png",distrib_subd_histogram,width = 10,height = 8)
 
