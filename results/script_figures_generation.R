@@ -969,7 +969,7 @@ map_eke_unbl <- ggplot() +
 
 
 # Read data 
-df_full <- read_csv("../data/dataframe_full_mld_and_n2.csv") 
+df_full <- read_csv("data/dataframe_full_mld_and_n2.csv") 
 
 # Standardize the log-transformed predictors
 df_full <- df_full %>%
@@ -981,6 +981,17 @@ df_full <- df_full %>%
 df_full$Anomaly <- df_full$Anomaly %>% as_factor()
 df_full$Anomaly_text <- ifelse(df_full$Anomaly == 1,"Subduction","No Subduction")
 
+df_summary <- df_full %>%
+  group_by(Anomaly) %>%
+  summarise(
+    median_cleaned_mld = median(cleaned_mld, na.rm = TRUE),
+    mean_cleaned_mld   = mean(cleaned_mld, na.rm = TRUE),
+    median_Max_N2      = median(Max_N2, na.rm = TRUE),
+    mean_Max_N2        = mean(Max_N2, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+df_summary
 
 
 # Density plot for Mixed Layer Depth (MLD)
@@ -1273,6 +1284,7 @@ esp_plot <- ggplot(
 
 # File too large for github
 merged_df<- readRDS("/data/GLOBARGO/src/data/merged_dataset_poc_estim.Rds")
+merged_df<- readRDS("../../merged_dataset_poc_estim.Rds")
 
 merged_df$LATITUDE %>% summary()
 
@@ -1291,10 +1303,14 @@ merged_df <- merged_df %>% mutate(poc_flux20w_bl = poc_bl * proportion * 20/200,
 merged_df$poc_flux200w_bl %>% summary()
 merged_df$poc_flux500w_bl %>% summary()
 # Get the daily mean fluxes
+
 annual_mean_region <- merged_df %>%
   group_by(LONGITUDE, LATITUDE) %>%
-  summarize(poc_flux_annual = mean(poc_flux200w_bl, na.rm = TRUE))
-
+  summarize(poc_flux_annual = mean(poc_flux200w_bl, na.rm = TRUE),
+            poc_flux_annual_top = mean(poc_flux500w_up, na.rm = TRUE),
+            poc_flux_annual_bot = mean(poc_flux20w_bl, na.rm = TRUE),
+            poc_bl_annual = mean(poc_bl, na.rm = TRUE)
+            )
 
 stipple_resolution <- 5
 
@@ -1342,9 +1358,17 @@ undersampled_corners <- undersampled %>%
 world <- ne_countries(scale = "medium", returnclass = "sf")
 
 annual_mean_region$poc_flux_annual_NA <- annual_mean_region$poc_flux_annual
-
-
 annual_mean_region$poc_flux_annual_NA <- ifelse(annual_mean_region$poc_flux_annual <= 0.05,NA,annual_mean_region$poc_flux_annual)
+
+annual_mean_region$poc_flux_annual_bot_NA <- annual_mean_region$poc_flux_annual_bot
+annual_mean_region$poc_flux_annual_bot_NA <- ifelse(annual_mean_region$poc_flux_annual_bot <= 0.005,NA,annual_mean_region$poc_flux_annual_bot)
+
+annual_mean_region$poc_flux_annual_top_NA <- annual_mean_region$poc_flux_annual_top
+annual_mean_region$poc_flux_annual_top_NA <- ifelse(annual_mean_region$poc_flux_annual_top <= 0.125,NA,annual_mean_region$poc_flux_annual_top)
+
+
+annual_mean_region$poc_flux_annual_top_NA %>% summary()
+annual_mean_region$poc_flux_annual_bot_NA %>% summary()
 
 poc_flux_map <- ggplot() +
   ## 1 ─────────────── POC‑flux background ──────────────────────────
@@ -1390,6 +1414,118 @@ poc_flux_map <- ggplot() +
     legend.box        = "horizontal",
     legend.key.width  = unit(2.2, "cm"),
     legend.key.height = unit(0.5, "cm"))
+
+poc_flux_map_top <- ggplot() +
+  ## 1 ─────────────── POC‑flux background ──────────────────────────
+  geom_tile(data = annual_mean_region,
+            aes(LONGITUDE, LATITUDE, fill = poc_flux_annual_top_NA),
+            alpha = 0.96) +
+  scale_fill_viridis_b(
+    name = "POC flux (mg C m⁻² day⁻¹)               ",
+    oob = scales::squish, na.value = "white") +                       # your viridis / magma scale object
+  
+  ## 2 ─────────────── White contours (same variable) ───────────────
+  geom_contour(data = annual_mean_region,
+               aes(LONGITUDE, LATITUDE, z = poc_flux_annual,
+                   colour = after_stat(level)),
+               colour  = "white",   # fixed colour, so legend disabled below
+               alpha   = 0.30,
+               binwidth = 2.5,
+               show.legend = FALSE) +
+  
+  ## 3 ─────────────── Stippling for undersampled grid cells ────────
+  geom_point(data = undersampled_corners,
+             aes(LON, LAT),
+             colour = "red", size = 1.3, alpha = 0.7, shape = 20) +
+  
+  ## 4 ─────────────── Coastlines  ──────────────────────────────────
+  geom_sf(data = world, fill = "lightgrey", colour = "lightgrey",
+          linewidth = 0.3) +
+  
+  ## 5 ─────────────── Axes, ticks, labels, theme  ──────────────────
+  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = FALSE) +
+  scale_x_continuous(breaks = ticks_x, labels = label_lon) +
+  scale_y_continuous(breaks = ticks_y, labels = label_lat) +
+  labs(
+    title = "c • Average annual POC flux", # (assuming W = 50 m day⁻¹)
+    x = "Longitude", y = "Latitude", fill = "POC flux\n(mg C m⁻² day⁻¹)"
+  ) +
+  theme_map(base_size = 18) +
+  theme(
+    legend.position   = "bottom",
+    legend.direction  = "horizontal",
+    legend.box        = "horizontal",
+    legend.key.width  = unit(2.2, "cm"),
+    legend.key.height = unit(0.5, "cm"))
+
+
+
+
+
+
+## Seasonal subsets
+djf_merged <- merged_df %>% filter(season == "DJF")
+mam_merged <- merged_df %>% filter(season == "MAM")
+jja_merged <- merged_df %>% filter(season == "JJA")
+son_merged <- merged_df %>% filter(season == "SON")
+
+## Compute global range for legend
+poc_range <- range(merged_df$poc_bl, na.rm = TRUE)
+
+## Helper function
+make_poc_map <- function(data, season_label) {
+  ggplot() +
+    geom_tile(data = data,
+              aes(LONGITUDE, LATITUDE, fill = poc_bl),
+              alpha = 0.96) +
+    scale_fill_viridis_b(
+      n.breaks = 8,
+      limits   = poc_range,        # <<< fixed scale across seasons
+      oob      = scales::squish
+    ) +
+    geom_contour(data = data,
+                 aes(LONGITUDE, LATITUDE, z = poc_bl,
+                     colour = after_stat(level)),
+                 colour  = "white",
+                 alpha   = 0.30,
+                 binwidth = 20,
+                 show.legend = FALSE) +
+    geom_point(data = undersampled_corners,
+               aes(LON, LAT),
+               colour = "red", size = 1.3, alpha = 0.7, shape = 20) +
+    geom_sf(data = world, fill = "lightgrey", colour = "lightgrey",
+            linewidth = 0.3) +
+    coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = FALSE) +
+    scale_x_continuous(breaks = ticks_x, labels = label_lon) +
+    scale_y_continuous(breaks = ticks_y, labels = label_lat) +
+    labs(
+      title = paste0(season_label, "  Average Integrated POC"),
+      x = "Longitude", y = "Latitude", fill = "POC flux\n(mg C m⁻²)"
+    ) +
+    theme_map(base_size = 18) +
+    theme(
+      legend.position   = "bottom",
+      legend.direction  = "horizontal",
+      legend.box        = "horizontal",
+      legend.key.width  = unit(2.2, "cm"),
+      legend.key.height = unit(0.5, "cm"))
+}
+
+## Generate plots
+poc_djf <- make_poc_map(djf_merged, "a • DJF")
+poc_mam <- make_poc_map(mam_merged, "b • MAM")
+poc_jja <- make_poc_map(jja_merged, "c • JJA")
+poc_son <- make_poc_map(son_merged, "d • SON")
+
+## Arrange and keep common legend
+library(patchwork)
+poc_all <- (poc_djf + poc_mam) / (poc_jja + poc_son) +
+  plot_layout(guides = "collect") & theme(legend.position = "bottom") +
+  shrink_margins
+
+ggsave(filename = "../pubfig/poc_in_si.png",poc_all,width = 17,height = 10,dpi = 400)
+
+
 
 shrink_margins <- theme(plot.margin = margin(5, 5, 5, 5))   # 5 pts all round
 esp_plot        <- esp_plot        + shrink_margins
