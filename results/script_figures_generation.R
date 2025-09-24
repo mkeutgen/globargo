@@ -22,7 +22,7 @@ library(sp)
 library(spdep)
 library(mgcv)
 library(patchwork)
-
+library(readr)
 library(scales)
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
@@ -30,6 +30,9 @@ conflict_prefer("filter", "dplyr")
 Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
 setwd("/data/GLOBARGO/globargo_repo/scripts/")
 df_argo_clean <- read_csv("../data/df_argo_loc.csv")
+df_argo_clean$TIME %>% min(na.rm = T)
+df_argo_clean$TIME %>% max(na.rm = T)
+
 df_complete_clean <- read_csv("../data/manually_verified_physical_subd_events.csv")
 df_carbon_clean <- read_csv("../data/df_carbon_subduction_anom.csv")
 
@@ -437,9 +440,7 @@ subd_distrib_plot <- ggplot(combined_data_global,
   ) +
   labs(
     x     = "Depth (m)",
-    y     = "Estimated Density",
-    title = "Carbon subduction happens mostly between 200 m and 500 m"
-  ) +
+    y     = "Density"  ) +
   scale_x_continuous(
     breaks  = seq(0, 800, by = 200),
     labels  = seq(200, 1000, by = 200)
@@ -486,9 +487,7 @@ subd_distrib_plot_time_seq <- ggplot(combined_data, aes(x = mean_seq, fill = Typ
   ) +
   labs(
     x = "Depth (m)",
-    y = "Estimated Density",
-    title = "Carbon subduction happens mostly between 200 and 500 meters"
-  )+  scale_x_continuous(
+    y = "Density"  )+  scale_x_continuous(
     breaks = seq(0, 800, by = 200),
     labels = seq(200, 1000, by = 200)
   )+ 
@@ -523,9 +522,7 @@ subd_distrib_plot_time_seq_combined <- ggplot(combined_data, aes(x = mean_seq, f
   ) +
   labs(
     x = "Mean Sequestration time (years)",
-    y = "Density",
-    title = "Carbon subduction happens mostly between 200 and 500 meters"
-  )+  scale_x_continuous(
+    y = "Density"  )+  scale_x_continuous(
     breaks = seq(0, 2000, by = 200),
     labels = seq(0, 2000, by = 200)
   )+ 
@@ -985,6 +982,20 @@ df_full <- df_full %>%
 df_full$Anomaly <- df_full$Anomaly %>% as_factor()
 df_full$Anomaly_text <- ifelse(df_full$Anomaly == 1,"Subduction","No Subduction")
 
+df_full %>% filter(Anomaly==0) %>% pull(cleaned_mld) %>% median()
+df_full %>% filter(Anomaly==1) %>% pull(cleaned_mld) %>% median()
+
+df_full %>% filter(Anomaly==0) %>% pull(cleaned_mld) %>% IQR()
+df_full %>% filter(Anomaly==1) %>% pull(cleaned_mld) %>% IQR()
+
+
+df_full %>% filter(Anomaly==0) %>% pull(cleaned_N2) %>% median(na.rm = T)
+df_full %>% filter(Anomaly==1) %>% pull(cleaned_N2) %>% median(na.rm = T)
+
+df_full %>% filter(Anomaly==0) %>% pull(cleaned_N2) %>% IQR(na.rm = T)
+df_full %>% filter(Anomaly==1) %>% pull(cleaned_N2) %>% IQR(na.rm = T)
+
+
 
 
 # Density plot for Mixed Layer Depth (MLD)
@@ -1149,9 +1160,11 @@ ggsave("../pubfig/figure4_EKE_map_and_PDFs.png",
 sensitivity_results <- readRDS(file = "../data/sensitivity_res.Rds")
 sensitivity_region <- readRDS(file = "../data/sensitivity_region.Rds")
 
+sensitivity_region <- sensitivity_region %>% pivot_longer(cols=!c(w,region))
+
 sensitivity_region <- sensitivity_region %>% mutate(
   Metric = case_when(
-    grepl("fifty_yrs", name) ~ "Export Sequestered for >50 yrs",
+    grepl("fifty_yrs", name) ~ "Export >50 yrs",
     grepl("total", name) ~ "Total export",
     TRUE ~ name
   ),
@@ -1162,33 +1175,46 @@ sensitivity_region <- sensitivity_region %>% mutate(
   )
 )
 
-w200_df <- sensitivity_region %>% group_by(region,Metric) %>% filter(w == 200) %>% filter(Export_Type == "Baseline")
+w200_df <- sensitivity_region %>% group_by(region,Metric) %>% filter(w == 200) %>%
+  filter(Export_Type == "Baseline") %>% filter(!is.na(region))
 
-pacific_trop <- w200_df %>%
-  select(region,Metric,value)  %>%
-  filter(region %in% c("North Pacific", "Northern Tropics", "Southern Tropics")) %>%
-  group_by(Metric) %>%
-  summarise(
-    value = sum(value, na.rm = TRUE),
+tot_expw200 <- w200_df %>% filter(!is.na(region )) %>% filter(Export_Type == "Baseline") %>%
+  filter(Metric == "Total export") %>% pull(value) %>% sum()
+seq_expw200 <- w200_df %>% filter(!is.na(region )) %>% filter(Export_Type == "Baseline") %>%
+  filter(Metric == "Export >50 yrs") %>% pull(value) %>% sum()
 
-    .groups = "drop"
-  ) %>%
-  mutate(region = "North Pacific & Tropics")
-
-other_regions <- w200_df %>%
-  filter(!region %in% c("North Pacific", "Northern Tropics", "Southern Tropics",NA)) %>% select(region,Metric,value)
-
-
-central_df <- bind_rows(pacific_trop,other_regions) %>%
-  add_row(
-    region      = "Global",
-    Metric      = "Total export",
-    value         = 0.051115258      # ← your “value”
-  ) %>% add_row(
-    region      = "Global",
-    Metric      = "Export Sequestered for >50 yrs",
-    value         = 0.014390463      # ← your “value”
+w200_df <- w200_df %>% mutate(
+  percentage = case_when(
+    Metric == "Total export" ~ 100* value/tot_expw200,
+    Metric == "Export >50 yrs" ~ 100* value/seq_expw200,
+    TRUE ~ NA_real_  # default case
   )
+) %>% select(!Export_Type)
+
+w200_df %>% filter(Metric == "Total export") %>% pull(percentage) %>% sum()
+w200_df %>% filter(Metric == "Export >50 yrs") %>% pull(percentage) %>% sum()
+
+
+
+# Extract NA values for each metric and export type combination
+na_values <- w200_df %>%
+  filter(is.na(region)) %>%
+  select(Metric, Export_Type, na_value = value)
+
+
+na_values$region <- "North Atlantic"
+
+w200_df <- w200_df %>%
+  left_join(na_values, by = c("region", "Metric", "Export_Type")) %>%
+  mutate(
+    value = case_when(
+      !is.na(na_value) ~ value + na_value,  # Sum where na_value exists
+      TRUE ~ value  # Keep original value otherwise
+    )
+  ) %>%
+  select(-na_value)  # Remove the temporary na_value column
+
+w200_df
 
 sensitivity_region <- sensitivity_region %>% group_by(region,Metric) %>% mutate(min_export = min(value),
                                                         max_export = max(value),
@@ -1196,19 +1222,49 @@ sensitivity_region <- sensitivity_region %>% group_by(region,Metric) %>% mutate(
 
 
 sensitivity_region_sel <- sensitivity_region %>% select(region,Metric,min_export,max_export) %>%
-  unique()
+  unique() %>% na.omit()
 
-sensitivity_region_sel
+sensitivity_region_sel 
 
 sensitivity_region_sel %>% group_by(Metric) %>% summarize(global_min = sum(min_export),global_max=sum(max_export))
+
+na_values <- sensitivity_region_sel %>%
+  filter(region == "Mediterranean") %>%
+  select(Metric, region, min_export = min_export,max_export=max_export)
+
+
+na_values$region <- "North Atlantic"
+
+sensitivity_region_sel_updated <- sensitivity_region_sel %>%
+  left_join(na_values, by = c("region", "Metric")) %>%
+  mutate(
+    min_export = case_when(
+      !is.na(min_export.y) ~ min_export.x + min_export.y,  # Sum where na values exist
+      TRUE ~ min_export.x  # Keep original value otherwise
+    ),
+    max_export = case_when(
+      !is.na(max_export.y) ~ max_export.x + max_export.y,  # Sum where na values exist
+      TRUE ~ max_export.x  # Keep original value otherwise
+    ) 
+  ) %>%
+  select(-min_export.x, -min_export.y, -max_export.x, -max_export.y) %>%  # Remove temporary columns
+  filter(region != "Mediterranean")  
+
+sensitivity_region_sel_updated
+sensitivity_region_sel %>% filter(Metric == "Export >50 yrs") %>% pull(min_export)  %>% sum()
+sensitivity_region_sel %>% filter(Metric == "Export >50 yrs") %>% pull(max_export)  %>% sum()
+sensitivity_region_sel %>% filter(Metric == "Total export") %>% pull(min_export)  %>% sum()
+sensitivity_region_sel %>% filter(Metric == "Total export") %>% pull(max_export)  %>% sum()
+
 global_data <- data.frame(
   region = rep("Global", 2),
-  Metric = c("Export Sequestered for >50 yrs","Total export"),
-  min_export = c(0.00144,0.00511),
-  max_export = c(0.0706, 0.283)
+  Metric = c("Export >50 yrs","Total export"),
+  min_export = c(0.001434343,0.005042196),
+  max_export = c(0.07034874, 0.279184)
 )
 
-combined_data <- bind_rows(sensitivity_region_sel, global_data)
+combined_data <- bind_rows(sensitivity_region_sel_updated, global_data)
+combined_data$value <- combined_data$min_export*10
 
 pacific_tropics_combined <- combined_data %>%
   filter(region %in% c("North Pacific", "Northern Tropics", "Southern Tropics")) %>%
@@ -1226,29 +1282,33 @@ other_regions <- combined_data %>%
 
 # Combine the summed Pacific & Tropics with other regions
 final_aggregated_data <- bind_rows(other_regions, pacific_tropics_combined)
-final_aggregated_data$mid <- (final_aggregated_data$max_export + final_aggregated_data$min_export)/2
+final_aggregated_data$value <- final_aggregated_data$min_export*10
+
+
+final_aggregated_data$Metric <- final_aggregated_data$Metric %>% as_factor()
+
 final_aggregated_data
 
-# Add central, best estimate (w = 200 m/day, no remin )
-final_aggregated_data <- full_join(final_aggregated_data,central_df)
+combined_data
+
 
 esp_plot <- ggplot(
-  final_aggregated_data,
+  final_aggregated_data %>% filter(region == "Global"),
   aes(
-    x= region,           # x
+    x= Metric,           # x
     Mean,             # bar mid-point
     ymin = min_export,
     ymax = max_export,
     y  = value,
     color = Metric)
-) + geom_point(position = position_dodge2(width = 0.8, preserve = "single"),size=4)+
-  geom_errorbar(
+) + geom_point(position = position_dodge2(width = 0.8, preserve = "single"),size=6)+
+  geom_errorbar(linewidth=2,
     width    = 0.8,
     position = position_dodge2(width = 0.6, preserve = "single")
   ) + scale_color_manual(
     values = c(
       "Total export"                       = "#404788FF",  # teal-ish
-      "Export Sequestered for >50 yrs"     = "#55C667FF"),
+      "Export >50 yrs"     = "#55C667FF"),
     name = NULL
   )+
   ## SAME y-axis scale as esp_plot
@@ -1256,24 +1316,103 @@ esp_plot <- ggplot(
     breaks = c(0,0.1,0.2,0.3),limits=c(0,0.3)) +
   
   labs(
-    title = "a • Export of the Eddy Subduction Pump",
+    title = "a • Global Export  ",
     x     = NULL,y = "Export Rate (Pg C year⁻¹)" ) +
   
-  theme_map(base_size = 18)  + theme_bw() +
+  theme_map(base_size = 20)  + theme_bw(base_size = 20) +
   theme(
     panel.border    = element_rect(colour = "black", fill = NA, size = 0.6),
     axis.ticks      = element_line(colour = "black", size = 0.3),
-    axis.text       = element_text(size = 18 * 0.8),
     plot.title      = element_text(hjust = 0.5, face = "bold",
-                                   size  = 18 * 1.05,
+                                   size  = 20,
                                    margin = margin(b = 6)),
-    legend.position = "bottom",
-    legend.text     = element_text(size = 18 * 0.8),
+    legend.position = "none",
+    legend.text     = element_text(size = 20 ),
     legend.key.height = unit(0.5, "cm"),
     legend.key.width  = unit(2.2 ,  "cm"),
     plot.margin       = margin(2, 2, 2, 2),
-    axis.text.x       = element_text(angle = 45, hjust = 1),  # tilt if names are long
+    axis.text.y       = element_text(size = 18),
+    axis.text.x       = element_text(size = 18,angle = 15, hjust = 1),  # tilt if names are long
   )
+
+# Compute relative contributions
+plot_data <- final_aggregated_data %>%
+  group_by(Metric) %>%
+  mutate(global_total = value[region == "Global"],
+         rel_contrib  = value / global_total) %>%
+  ungroup() %>%
+  filter(region != "Global")  # exclude the global rows, only regions
+
+
+# Compute relative contributions
+plot_data_all <- combined_data %>%
+  group_by(Metric) %>%
+  mutate(global_total = value[region == "Global"],
+         rel_contrib  = value / global_total) %>%
+  ungroup() %>%
+  filter(region != "Global")  # exclude the global rows, only regions
+
+
+
+# Stacked barplot
+esp_relative_plot <- ggplot(plot_data,
+                            aes(x = Metric, y = rel_contrib, fill = region)) +
+  geom_bar(stat = "identity", position = "stack",width=.5) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "b • Regional contributions",
+    x     = NULL,
+    y     = "Fraction of Global Export"
+  ) +   scale_fill_viridis_d(option = "D",
+                          begin  = 0,   # skip dark purple
+                          end    = 0.7,   # stop before yellow
+                          name   = NULL) +
+  theme_bw(base_size = 20) +
+  theme(
+    panel.border      = element_rect(colour = "black", fill = NA, size = 0.6),
+    axis.ticks        = element_line(colour = "black", size = 0.3),
+    plot.title        = element_text(hjust = 0.5, face = "bold",
+                                     size  = 20,
+                                     margin = margin(b = 6)),
+    legend.position   = "bottom",
+    legend.text       = element_text(size = 20),
+    legend.key.height = unit(0.5, "cm"),
+    legend.key.width  = unit(0.5 , "cm"),
+    axis.text.x       = element_text(size = 18, angle = 15, hjust = 1),
+    axis.text.y       = element_text(size = 18)
+  )
+
+plot_data_all$Metric <- plot_data_all$Metric %>% as_factor()
+
+# Stacked barplot
+esp_relative_plot_all <- ggplot(plot_data_all,
+                            aes(x = Metric, y = rel_contrib, fill = region)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "b • Regional contributions to Global ESP Export",
+    x     = NULL,
+    y     = "Fraction of Global Export"
+  ) +   scale_fill_viridis_d() +
+  theme_bw(base_size = 18) +
+  theme(
+    panel.border      = element_rect(colour = "black", fill = NA, size = 0.6),
+    axis.ticks        = element_line(colour = "black", size = 0.3),
+    plot.title        = element_text(hjust = 0.5, face = "bold",
+                                     size  = 25,
+                                     margin = margin(b = 6)),
+    legend.position   = "bottom",
+    legend.text       = element_text(size = 18),
+    legend.key.height = unit(0.5, "cm"),
+    legend.key.width  = unit(2.2 , "cm"),
+    axis.text.x       = element_text(size = 18, angle = 15, hjust = 1),
+    axis.text.y       = element_text(size = 18)
+  )
+
+
+
+
+
 
 # File too large for github
 merged_df<- readRDS("/data/GLOBARGO/src/data/merged_dataset_poc_estim.Rds")
@@ -1361,15 +1500,6 @@ poc_flux_map <- ggplot() +
     limits = c(0.05,20 ),
     oob = scales::squish, na.value = "white") +                       # your viridis / magma scale object
   
-  ## 2 ─────────────── White contours (same variable) ───────────────
-  geom_contour(data = annual_mean_region,
-               aes(LONGITUDE, LATITUDE, z = poc_flux_annual,
-                   colour = after_stat(level)),
-               colour  = "white",   # fixed colour, so legend disabled below
-               alpha   = 0.30,
-               binwidth = 2.5,
-               show.legend = FALSE) +
-  
   ## 3 ─────────────── Stippling for undersampled grid cells ────────
   geom_point(data = undersampled_corners,
              aes(LON, LAT),
@@ -1384,30 +1514,30 @@ poc_flux_map <- ggplot() +
   scale_x_continuous(breaks = ticks_x, labels = label_lon) +
   scale_y_continuous(breaks = ticks_y, labels = label_lat) +
   labs(
-    title = "b • Average annual POC flux", # (assuming W = 50 m day⁻¹)
+    title = "c • Average annual POC flux", # (assuming W = 50 m day⁻¹)
     x = "Longitude", y = "Latitude", fill = "POC flux\n(mg C m⁻² day⁻¹)"
   ) +
-  theme_map(base_size = 18) +
+  theme_map(base_size = 20) +
   theme(
     legend.position   = "bottom",
     legend.direction  = "horizontal",
     legend.box        = "horizontal",
-    legend.key.width  = unit(2.2, "cm"),
+    legend.key.width  = unit(2.4, "cm"),
     legend.key.height = unit(0.5, "cm"))
 
 shrink_margins <- theme(plot.margin = margin(5, 5, 5, 5))   # 5 pts all round
 esp_plot        <- esp_plot        + shrink_margins
 poc_flux_map    <- poc_flux_map    + shrink_margins
+esp_relative_plot <- esp_relative_plot + shrink_margins
 
+(esp_plot | esp_relative_plot) / poc_flux_map + plot_layout(ncol = 2, widths = c(1, 2.2))
 
-
-combined_fig <- (esp_plot |  poc_flux_map) +
-  plot_layout(widths = c(1, 1.5),guides = "auto")
+combined_fig <- (esp_plot | esp_relative_plot) / poc_flux_map + plot_layout(ncol = 2, widths = c(1, 2.2))
 
 
 ggsave(plot = combined_fig,
        "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map.png",
-       width = 24,height = 10,dpi = 400)
+       width = 24,height = 8,dpi = 400)
 
 # Sensitivity of annual export to W : 
 df <- sensitivity_results
@@ -1463,419 +1593,6 @@ sensitivity_plot <- ggplot(df_plot,
   )
 
 ggsave(plot = sensitivity_plot,filename = "../pubfig/fig5_SI_sensitivity_global_export.png",width = 15,height = 10)
-
-
-df_esp <- tibble(
-  Study  = c(
-    "This Study",
-    "This Study",
-    "(Boyd et al, 2019)"
-  ),
-  Metric = c(
-    "Total export",
-    "Export Sequestered for >50 yrs",
-    "Total export"
-  ),
-  Min   = c(0.005111526, 0.0015, 0),
-  Mean  = c(0.0921,      0.0239,      1),
-  Max   = c(0.282916640, 0.070641275, 2)
-)
-
-# make sure Metric is a factor in the order you want
-df_esp$Metric <- factor(
-  df_esp$Metric,
-  levels = c(
-    "Total export",
-    "Export Sequestered for >50 yrs"
-  )
-)
-scale_boyd <- scale_y_continuous(limits = c(0, 2),
-                                 breaks = c(0,0.1,0.2,0.3,0.5,1,2),
-                                 labels=c("0","0.1","0.2","0.3","0.5","1","2"))
-
-esp_plot_boyd <- ggplot(df_esp,
-                        aes(Metric, Mean,
-                            ymin = Min, ymax = Max,
-                            fill = Study)) +
-  geom_crossbar(                    # rectangle + a mid-bar
-    width   = 0.5,                # horizontal width of each bar
-    fatten  = 0,                   # kills the “mean” point
-    position = position_dodge2(width = 0.6,         # side-by-side spacing
-                               preserve = "single")
-  ) +
-  
-  ## Viridis with the yellow–green range removed
-  scale_fill_manual(
-    values = c(
-      "(Boyd et al, 2019)"                       = "#55C667FF",  # teal-ish
-      "This Study"     = "#404788FF"   # amber-ish
-    ))+  
-  ## y‑axis from 0 to max + headroom
-  scale_boyd+  
-  labs(
-    title = "a • Global Export",
-    x = NULL,
-    y = "Export (Pg C year⁻¹)"
-  ) +
-  
-  theme_map(base_size = 18) +
-  theme(
-    axis.text.x       = element_text(angle = 45, vjust = 0.5),
-    legend.position   = "bottom",
-    legend.direction  = "horizontal",
-    legend.key.width  = unit(2.2, "cm"),
-    legend.key.height = unit(0.5, "cm"),
-    legend.title = element_blank()
-  )
-
-
-esp_plot_log10 <- ggplot(df_esp,
-                         aes(Metric, Mean,
-                             ymin = Min, ymax = Max,
-                             fill = Study)) +
-  geom_crossbar(                    # rectangle + a mid-bar
-    width   = 0.5,                # horizontal width of each bar
-    fatten  = 0,                   # kills the “mean” point
-    position = position_dodge2(width = 0.6,         # side-by-side spacing
-                               preserve = "single")
-  ) +
-  
-  ## Viridis with the yellow–green range removed
-  scale_fill_viridis_d(option = "D",
-                       begin  = 0.15,   # skip dark purple
-                       end    = 0.85,   # stop before yellow
-                       name   = NULL) +
-  
-  ## y‑axis from 0 to max + headroom
-  scale_y_log10(breaks=c(0.0015,0.025,0.1,1,2),labels=c("0.0015","0.025","0.1","1","2")) +
-  
-  labs(
-    title = "a • Global Export of the Eddy Subduction Pump",
-    x = NULL,
-    y = "Global Export (Pg C year⁻¹)"
-  )+ 
-  
-  theme_map(base_size = 18) +
-  theme(
-    axis.text.x       = element_text(angle = 0, vjust = 0.5),
-    legend.position   = "bottom",
-    legend.direction  = "horizontal",
-    legend.key.width  = unit(2.2, "cm"),
-    legend.key.height = unit(0.5, "cm")
-  )
-df_esp$Metric
-
-esp_plot <- ggplot(df_esp %>% filter(Study=="This Study"),
-                   aes(Metric, Mean,
-                       ymin = Min, ymax = Max,
-                       fill = Metric)) +
-  geom_crossbar(                    # rectangle + a mid-bar
-    width   = 0.5,                # horizontal width of each bar
-    fatten  = 0,                   # kills the “mean” point
-    position = position_dodge2(width = 0.6,         # side-by-side spacing
-                               preserve = "single")
-  ) +
-  
-  ## Viridis with the yellow–green range removed
-  scale_fill_manual(
-    values = c(
-      "Total export"                       = "#404788FF",  # teal-ish
-      "Export Sequestered for >50 yrs"     = "#55C667FF"   # amber-ish
-    ),
-    name = NULL
-  )+
-  labs(
-    title = "a • Global Export",
-    x = NULL,
-    y = "Export (Pg C year⁻¹)"
-  ) + scale_y_continuous(limits = c(0, 0.30),
-                         breaks = c(0.001,0.05,0.1,0.2,0.3),
-                         labels=c("0.001","0.05","0.1","0.2","0.3")) +
-  
-  theme_map(base_size = 18) +
-  theme(
-    axis.text.x       = element_text(angle = 0, vjust = 0.5),
-    legend.position   = "none",
-    legend.direction  = "horizontal",
-    legend.key.width  = unit(2.2, "cm"),
-    legend.key.height = unit(0.5, "cm")
-  )
-
-
-
-
-# Make sure Mean exists in the regional data frame
-sensitivity_region <- sensitivity_region %>%
-  mutate(Mean = 0.5 * (max_export + min_export))
-
-# ─────────────────────────────────────────────────────────────
-# 1.  Build the regional plot with harmonised styling
-# ─────────────────────────────────────────────────────────────
-sensitivity_region
-# names of the bands you want to merge
-combo <- c("Northern Tropics", "Southern Tropics", "North Pacific")
-
-sensitivity_region2 <- sensitivity_region %>% 
-  ## 1. build the new combined row
-  filter(region %in% combo) %>% 
-  summarise(
-    region      = "Tropics and North Pacific",
-    min_export  = sum(min_export,  na.rm = TRUE),
-    max_export  = sum(max_export,  na.rm = TRUE)
-  ) %>% 
-  mutate(Mean = 0.5 * (min_export + max_export)) %>%        # same formula
-  ## 2. stick it onto the original data
-  bind_rows(sensitivity_region) %>% 
-  ## 3. reorder if you like (optional)
-  relocate(region, min_export, max_export, Mean)
-
-sensitivity_region2 <- sensitivity_region2 %>% filter(region %in% c("North Atlantic","Tropics and North Pacific","Southern Ocean"))
-
-sensitivity_region2$Metric <- "Total export"
-sensitivity_region2$Study  <- "This Study"
-sensitivity_region2$Min <-  sensitivity_region2$min_export
-sensitivity_region2$Max <-  sensitivity_region2$max_export
-
-df_esp_region <- bind_rows(df_esp,sensitivity_region2) %>% filter(Study == "This Study") %>% select(Metric,Min,Mean,Max,region)
-df_esp_region[1,5] <- "Global Export"
-df_esp_region[2,5] <- "Global Export Sequestered for >50 yrs"
-df_esp_region$region <- df_esp_region$region %>% as_factor()
-
-
-# re-factor with the new level order
-df_esp_region$region <- factor(
-  df_esp_region$region,
-  levels = c("Global Export","North Atlantic","Tropics and North Pacific","Southern Ocean","Global Export Sequestered for >50 yrs")
-)
-
-esp_plot <- ggplot(
-  df_esp_region,
-  aes(
-    x= region,           # x
-    Mean,             # bar mid-point
-    ymin = Min,
-    ymax = Max,
-    fill = Metric)
-) +
-  geom_crossbar(
-    width    = 0.5,
-    fatten   = 0,
-    position = position_dodge2(width = 0.6, preserve = "single")
-  ) + scale_fill_manual(
-    values = c(
-      "Total export"                       = "#404788FF",  # teal-ish
-      "Export Sequestered for >50 yrs"     = "#55C667FF"   # amber-ish
-    ),
-    name = NULL
-  )+
-  ## SAME y-axis scale as esp_plot
-  scale_y_continuous(
-    breaks = c(0,0.1,0.2,0.3),limits=c(0,0.3)) +
-  
-  labs(
-    title = "a • Export of the Eddy Subduction Pump",
-    x     = NULL,y = "Export Rate (Pg C year⁻¹)" ) +
-  
-  theme_map(base_size = 18) +
-  theme(
-    axis.text.x       = element_text(angle = 45, hjust = 1),  # tilt if names are long
-    legend.position   = "none",
-    legend.direction  = "horizontal",
-    legend.key.width  = unit(2.2, "cm"),
-    legend.key.height = unit(0.5, "cm")
-  )
-
-esp_plot_log10 <- ggplot(
-  df_esp_region,
-  aes(
-    x= region,           # x
-    Mean,             # bar mid-point
-    ymin = Min,
-    ymax = Max,
-    fill = Metric)
-) +
-  geom_crossbar(
-    width    = 0.5,
-    fatten   = 0,
-    position = position_dodge2(width = 0.6, preserve = "single")
-  ) + scale_fill_manual(
-    values = c(
-      "Total export"                       = "#404788FF",  # teal-ish
-      "Export Sequestered for >50 yrs"     = "#55C667FF"   # amber-ish
-    ),
-    name = NULL
-  )+
-  ## SAME y-axis scale as esp_plot
-  scale_y_log10() +
-  
-  labs(
-    title = "a • Export of the Eddy Subduction Pump",
-    x     = NULL,y = "Export Rate (Pg C year⁻¹)" ) +
-  
-  theme_map(base_size = 18) +
-  theme(
-    axis.text.x       = element_text(angle = 45, hjust = 1),  # tilt if names are long
-    legend.position   = "none",
-    legend.direction  = "horizontal",
-    legend.key.width  = unit(2.2, "cm"),
-    legend.key.height = unit(0.5, "cm"),
-    axis.ticks      = element_line(colour = "black", size = 0.3),
-    axis.text       = element_text(size = base_size * 0.8),
-    plot.title      = element_text(hjust = 0.5, face = "bold",
-                                   size  = base_size * 1.05,
-                                   margin = margin(b = 6)),
-  )
-
-
-# File too large for github
-merged_df<- readRDS("data/merged_dataset_poc_estim.Rds")
-
-merged_df$LATITUDE %>% summary()
-
-
-# POC flux assuming T = 4 days (mean speed of 50 m/s)
-merged_df <- merged_df %>% mutate(poc_flux20w_bl = poc_bl * proportion * 20/200,  # lower bound
-                                  poc_flux20w_up = poc_up * proportion * 20/200,
-                                  poc_flux200w_bl = poc_bl * proportion * 200/200,
-                                  poc_flux500w_bl = poc_bl * proportion * 500/200,
-                                  poc_flux500w_up = poc_up * proportion * 500/200 # upper bound
-)
-
-
-
-
-merged_df$poc_flux200w_bl %>% summary()
-merged_df$poc_flux500w_bl %>% summary()
-# Get the daily mean fluxes
-annual_mean_region <- merged_df %>%
-  group_by(LONGITUDE, LATITUDE) %>%
-  summarize(poc_flux_annual_bl = mean(poc_flux20w_bl, na.rm = TRUE),
-            poc_flux_annual_up = mean(poc_flux500w_up, na.rm = TRUE))
-
-annual_mean_region
-
-stipple_resolution <- 5
-
-argo_bins <- df_argo_clean %>%
-  mutate(
-    lon_bin_stipple = floor(LONGITUDE / stipple_resolution) * stipple_resolution,
-    lat_bin_stipple = floor(LATITUDE / stipple_resolution) * stipple_resolution
-  ) %>%
-  group_by(lon_bin_stipple, lat_bin_stipple) %>%
-  summarize(count = n(), .groups = "drop")
-
-full_grid <- expand.grid(
-  lon_bin_stipple = seq(-180, 175, by = stipple_resolution),
-  lat_bin_stipple = seq(-90, 90, by = stipple_resolution)
-) %>%
-  as_tibble()
-
-# Fill in any missing bins with count = 0
-argo_bins_full <- full_grid %>%
-  left_join(argo_bins, by = c("lon_bin_stipple", "lat_bin_stipple")) %>%
-  mutate(count = ifelse(is.na(count), 0, count))
-
-# 2. Identify undersampled areas (e.g., fewer than 1 profile)
-undersampled <- argo_bins_full %>% filter(count < 1)
-
-# 3. Generate corner points for each undersampled grid cell (4 corners per cell)
-undersampled_corners <- undersampled %>%
-  rowwise() %>%
-  mutate(corners = list(
-    data.frame(
-      LON = c(lon_bin_stipple,
-              lon_bin_stipple + stipple_resolution,
-              lon_bin_stipple,
-              lon_bin_stipple + stipple_resolution),
-      LAT = c(lat_bin_stipple,
-              lat_bin_stipple,
-              lat_bin_stipple + stipple_resolution,
-              lat_bin_stipple + stipple_resolution)
-    )
-  )) %>%
-  ungroup() %>%
-  unnest(corners)
-
-# 4. Filter the prediction grid to the desired season
-world <- ne_countries(scale = "medium", returnclass = "sf")
-
-
-annual_mean$poc_flux_annual_NA <- ifelse(df_plot$poc_flux_annual <= 0.05,NA,df_plot$poc_flux_annual)
-
-poc_flux_map <- ggplot() +
-  ## 1 ─────────────── POC‑flux background ──────────────────────────
-  geom_tile(data = annual_mean,
-            aes(LONGITUDE, LATITUDE, fill = poc_flux_annual_NA),
-            alpha = 0.96) +
-  scale_fill_viridis_b(
-    name = "POC flux (mg C m⁻² day⁻¹)",
-    breaks = c(0.1,0.5,1,2,5,7.5),
-    limits = c(0.5,20 ),
-    oob = scales::squish, na.value = "white") +                       # your viridis / magma scale object
-  
-  ## 2 ─────────────── White contours (same variable) ───────────────
-  geom_contour(data = df_plot,
-               aes(LONGITUDE, LATITUDE, z = poc_flux_annual,
-                   colour = after_stat(level)),
-               colour  = "white",   # fixed colour, so legend disabled below
-               alpha   = 0.30,
-               binwidth = 2.5,
-               show.legend = FALSE) +
-  
-  ## 3 ─────────────── Stippling for undersampled grid cells ────────
-  geom_point(data = undersampled_corners,
-             aes(LON, LAT),
-             colour = "red", size = 1.3, alpha = 0.7, shape = 20) +
-  
-  ## 4 ─────────────── Coastlines  ──────────────────────────────────
-  geom_sf(data = world, fill = "lightgrey", colour = "lightgrey",
-          linewidth = 0.3) +
-  
-  ## 5 ─────────────── Axes, ticks, labels, theme  ──────────────────
-  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = FALSE) +
-  scale_x_continuous(breaks = ticks_x, labels = label_lon) +
-  scale_y_continuous(breaks = ticks_y, labels = label_lat) +
-  labs(
-    title = "b • Average annual POC flux", # (assuming W = 50 m day⁻¹)
-    x = "Longitude", y = "Latitude", fill = "POC flux\n(mg C m⁻² day⁻¹)"
-  ) +
-  theme_map(base_size = 18) +
-  theme(
-    legend.position   = "bottom",
-    legend.direction  = "horizontal",
-    legend.box        = "horizontal",
-    legend.key.width  = unit(2.2, "cm"),
-    legend.key.height = unit(0.5, "cm"))
-
-shrink_margins <- theme(plot.margin = margin(5, 5, 5, 5))   # 5 pts all round
-esp_plot        <- esp_plot        + shrink_margins
-esp_region_plot <- esp_region_plot + shrink_margins
-poc_flux_map    <- poc_flux_map    + shrink_margins
-
-
-
-combined_fig <- (esp_plot |  poc_flux_map) +
-  plot_layout(widths = c(1, 2),guides = "auto")
-
-combined_fig_boyd <- (esp_plot_boyd |  poc_flux_map) +
-  plot_layout(widths = c(1, 2),guides = "auto")
-
-
-combined_fig_log <- (esp_plot_log10|  poc_flux_map )+
-  plot_layout(widths = c(1, 2),guides = "auto")
-
-ggsave(plot = combined_fig,
-       "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map.png",
-       width = 18,height = 10,dpi = 250)
-
-ggsave(plot = combined_fig_log,
-       "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map_log.png",
-       width = 25,height = 10,dpi = 250)
-
-combined_fig <- esp_plot_log10 | poc_flux_map
-ggsave(plot = combined_fig,
-       "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map_log10.png",
-       width = 19,height = 10,dpi = 400)
 
 
 ############################
@@ -1959,4 +1676,423 @@ profile_grid <- (AOU_plot | ABS_SAL_plot + POC_plot)+
   plot_layout(guides = "collect") &   # single legend row
   theme(legend.position = "bottom")
 
+########################################
+#########################################
+##################### JUNK CODE
+ #
 
+# df_esp <- tibble(
+#   Study  = c(
+#     "This Study",
+#     "This Study",
+#     "(Boyd et al, 2019)"
+#   ),
+#   Metric = c(
+#     "Total export",
+#     "Export Sequestered for >50 yrs",
+#     "Total export"
+#   ),
+#   Min   = c(0.005111526, 0.0015, 0),
+#   Mean  = c(0.0921,      0.0239,      1),
+#   Max   = c(0.282916640, 0.070641275, 2)
+# )
+# 
+# # make sure Metric is a factor in the order you want
+# df_esp$Metric <- factor(
+#   df_esp$Metric,
+#   levels = c(
+#     "Total export",
+#     "Export Sequestered for >50 yrs"
+#   )
+# )
+# scale_boyd <- scale_y_continuous(limits = c(0, 2),
+#                                  breaks = c(0,0.1,0.2,0.3,0.5,1,2),
+#                                  labels=c("0","0.1","0.2","0.3","0.5","1","2"))
+# 
+# esp_plot_boyd <- ggplot(df_esp,
+#                         aes(Metric, Mean,
+#                             ymin = Min, ymax = Max,
+#                             fill = Study)) +
+#   geom_crossbar(                    # rectangle + a mid-bar
+#     width   = 0.5,                # horizontal width of each bar
+#     fatten  = 0,                   # kills the “mean” point
+#     position = position_dodge2(width = 0.6,         # side-by-side spacing
+#                                preserve = "single")
+#   ) +
+#   
+#   ## Viridis with the yellow–green range removed
+#   scale_fill_manual(
+#     values = c(
+#       "(Boyd et al, 2019)"                       = "#55C667FF",  # teal-ish
+#       "This Study"     = "#404788FF"   # amber-ish
+#     ))+  
+#   ## y‑axis from 0 to max + headroom
+#   scale_boyd+  
+#   labs(
+#     title = "a • Global Export",
+#     x = NULL,
+#     y = "Export (Pg C year⁻¹)"
+#   ) +
+#   
+#   theme_map(base_size = 18) +
+#   theme(
+#     axis.text.x       = element_text(angle = 45, vjust = 0.5),
+#     legend.position   = "bottom",
+#     legend.direction  = "horizontal",
+#     legend.key.width  = unit(2.2, "cm"),
+#     legend.key.height = unit(0.5, "cm"),
+#     legend.title = element_blank()
+#   )
+# 
+# 
+# esp_plot_log10 <- ggplot(df_esp,
+#                          aes(Metric, Mean,
+#                              ymin = Min, ymax = Max,
+#                              fill = Study)) +
+#   geom_crossbar(                    # rectangle + a mid-bar
+#     width   = 0.5,                # horizontal width of each bar
+#     fatten  = 0,                   # kills the “mean” point
+#     position = position_dodge2(width = 0.6,         # side-by-side spacing
+#                                preserve = "single")
+#   ) +
+#   
+#   ## Viridis with the yellow–green range removed
+#   scale_fill_viridis_d(option = "D",
+#                        begin  = 0.15,   # skip dark purple
+#                        end    = 0.85,   # stop before yellow
+#                        name   = NULL) +
+#   
+#   ## y‑axis from 0 to max + headroom
+#   scale_y_log10(breaks=c(0.0015,0.025,0.1,1,2),labels=c("0.0015","0.025","0.1","1","2")) +
+#   
+#   labs(
+#     title = "a • Global Export of the Eddy Subduction Pump",
+#     x = NULL,
+#     y = "Global Export (Pg C year⁻¹)"
+#   )+ 
+#   
+#   theme_map(base_size = 18) +
+#   theme(
+#     axis.text.x       = element_text(angle = 0, vjust = 0.5),
+#     legend.position   = "bottom",
+#     legend.direction  = "horizontal",
+#     legend.key.width  = unit(2.2, "cm"),
+#     legend.key.height = unit(0.5, "cm")
+#   )
+# df_esp$Metric
+# 
+# esp_plot <- ggplot(df_esp %>% filter(Study=="This Study"),
+#                    aes(Metric, Mean,
+#                        ymin = Min, ymax = Max,
+#                        fill = Metric)) +
+#   geom_crossbar(                    # rectangle + a mid-bar
+#     width   = 0.5,                # horizontal width of each bar
+#     fatten  = 0,                   # kills the “mean” point
+#     position = position_dodge2(width = 0.6,         # side-by-side spacing
+#                                preserve = "single")
+#   ) +
+#   
+#   ## Viridis with the yellow–green range removed
+#   scale_fill_manual(
+#     values = c(
+#       "Total export"                       = "#404788FF",  # teal-ish
+#       "Export Sequestered for >50 yrs"     = "#55C667FF"   # amber-ish
+#     ),
+#     name = NULL
+#   )+
+#   labs(
+#     title = "a • Global Export",
+#     x = NULL,
+#     y = "Export (Pg C year⁻¹)"
+#   ) + scale_y_continuous(limits = c(0, 0.30),
+#                          breaks = c(0.001,0.05,0.1,0.2,0.3),
+#                          labels=c("0.001","0.05","0.1","0.2","0.3")) +
+#   
+#   theme_map(base_size = 18) +
+#   theme(
+#     axis.text.x       = element_text(angle = 0, vjust = 0.5),
+#     legend.position   = "none",
+#     legend.direction  = "horizontal",
+#     legend.key.width  = unit(2.2, "cm"),
+#     legend.key.height = unit(0.5, "cm")
+#   )
+# 
+# 
+# 
+# 
+# # Make sure Mean exists in the regional data frame
+# sensitivity_region <- sensitivity_region %>%
+#   mutate(Mean = 0.5 * (max_export + min_export))
+# 
+# # ─────────────────────────────────────────────────────────────
+# # 1.  Build the regional plot with harmonised styling
+# # ─────────────────────────────────────────────────────────────
+# sensitivity_region
+# # names of the bands you want to merge
+# combo <- c("Northern Tropics", "Southern Tropics", "North Pacific")
+# 
+# sensitivity_region2 <- sensitivity_region %>% 
+#   ## 1. build the new combined row
+#   filter(region %in% combo) %>% 
+#   summarise(
+#     region      = "Tropics and North Pacific",
+#     min_export  = sum(min_export,  na.rm = TRUE),
+#     max_export  = sum(max_export,  na.rm = TRUE)
+#   ) %>% 
+#   mutate(Mean = 0.5 * (min_export + max_export)) %>%        # same formula
+#   ## 2. stick it onto the original data
+#   bind_rows(sensitivity_region) %>% 
+#   ## 3. reorder if you like (optional)
+#   relocate(region, min_export, max_export, Mean)
+# 
+# sensitivity_region2 <- sensitivity_region2 %>% filter(region %in% c("North Atlantic","Tropics and North Pacific","Southern Ocean"))
+# 
+# sensitivity_region2$Metric <- "Total export"
+# sensitivity_region2$Study  <- "This Study"
+# sensitivity_region2$Min <-  sensitivity_region2$min_export
+# sensitivity_region2$Max <-  sensitivity_region2$max_export
+# 
+# df_esp_region <- bind_rows(df_esp,sensitivity_region2) %>% filter(Study == "This Study") %>% select(Metric,Min,Mean,Max,region)
+# df_esp_region[1,5] <- "Global Export"
+# df_esp_region[2,5] <- "Global Export Sequestered for >50 yrs"
+# df_esp_region$region <- df_esp_region$region %>% as_factor()
+# 
+# 
+# # re-factor with the new level order
+# df_esp_region$region <- factor(
+#   df_esp_region$region,
+#   levels = c("Global Export","North Atlantic","Tropics and North Pacific","Southern Ocean","Global Export Sequestered for >50 yrs")
+# )
+# 
+# esp_plot <- ggplot(
+#   df_esp_region,
+#   aes(
+#     x= region,           # x
+#     Mean,             # bar mid-point
+#     ymin = Min,
+#     ymax = Max,
+#     fill = Metric)
+# ) +
+#   geom_crossbar(
+#     width    = 0.5,
+#     fatten   = 0,
+#     position = position_dodge2(width = 0.6, preserve = "single")
+#   ) + scale_fill_manual(
+#     values = c(
+#       "Total export"                       = "#404788FF",  # teal-ish
+#       "Export Sequestered for >50 yrs"     = "#55C667FF"   # amber-ish
+#     ),
+#     name = NULL
+#   )+
+#   ## SAME y-axis scale as esp_plot
+#   scale_y_continuous(
+#     breaks = c(0,0.1,0.2,0.3),limits=c(0,0.3)) +
+#   
+#   labs(
+#     title = "a • Export of the Eddy Subduction Pump",
+#     x     = NULL,y = "Export Rate (Pg C year⁻¹)" ) +
+#   
+#   theme_map(base_size = 18) +
+#   theme(
+#     axis.text.x       = element_text(angle = 45, hjust = 1),  # tilt if names are long
+#     legend.position   = "none",
+#     legend.direction  = "horizontal",
+#     legend.key.width  = unit(2.2, "cm"),
+#     legend.key.height = unit(0.5, "cm")
+#   )
+# 
+# esp_plot_log10 <- ggplot(
+#   df_esp_region,
+#   aes(
+#     x= region,           # x
+#     Mean,             # bar mid-point
+#     ymin = Min,
+#     ymax = Max,
+#     fill = Metric)
+# ) +
+#   geom_crossbar(
+#     width    = 0.5,
+#     fatten   = 0,
+#     position = position_dodge2(width = 0.6, preserve = "single")
+#   ) + scale_fill_manual(
+#     values = c(
+#       "Total export"                       = "#404788FF",  # teal-ish
+#       "Export Sequestered for >50 yrs"     = "#55C667FF"   # amber-ish
+#     ),
+#     name = NULL
+#   )+
+#   ## SAME y-axis scale as esp_plot
+#   scale_y_log10() +
+#   
+#   labs(
+#     title = "a • Export of the Eddy Subduction Pump",
+#     x     = NULL,y = "Export Rate (Pg C year⁻¹)" ) +
+#   
+#   theme_map(base_size = 18) +
+#   theme(
+#     axis.text.x       = element_text(angle = 45, hjust = 1),  # tilt if names are long
+#     legend.position   = "none",
+#     legend.direction  = "horizontal",
+#     legend.key.width  = unit(2.2, "cm"),
+#     legend.key.height = unit(0.5, "cm"),
+#     axis.ticks      = element_line(colour = "black", size = 0.3),
+#     axis.text       = element_text(size = base_size * 0.8),
+#     plot.title      = element_text(hjust = 0.5, face = "bold",
+#                                    size  = base_size * 1.05,
+#                                    margin = margin(b = 6)),
+#   )
+# 
+# 
+# # File too large for github
+# merged_df<- readRDS("data/merged_dataset_poc_estim.Rds")
+# 
+# merged_df$LATITUDE %>% summary()
+# 
+# 
+# # POC flux assuming T = 4 days (mean speed of 50 m/s)
+# merged_df <- merged_df %>% mutate(poc_flux20w_bl = poc_bl * proportion * 20/200,  # lower bound
+#                                   poc_flux20w_up = poc_up * proportion * 20/200,
+#                                   poc_flux200w_bl = poc_bl * proportion * 200/200,
+#                                   poc_flux500w_bl = poc_bl * proportion * 500/200,
+#                                   poc_flux500w_up = poc_up * proportion * 500/200 # upper bound
+# )
+# 
+# 
+# 
+# 
+# merged_df$poc_flux200w_bl %>% summary()
+# merged_df$poc_flux500w_bl %>% summary()
+# # Get the daily mean fluxes
+# annual_mean_region <- merged_df %>%
+#   group_by(LONGITUDE, LATITUDE) %>%
+#   summarize(poc_flux_annual_bl = mean(poc_flux20w_bl, na.rm = TRUE),
+#             poc_flux_annual_up = mean(poc_flux500w_up, na.rm = TRUE))
+# 
+# annual_mean_region
+# 
+# stipple_resolution <- 5
+# 
+# argo_bins <- df_argo_clean %>%
+#   mutate(
+#     lon_bin_stipple = floor(LONGITUDE / stipple_resolution) * stipple_resolution,
+#     lat_bin_stipple = floor(LATITUDE / stipple_resolution) * stipple_resolution
+#   ) %>%
+#   group_by(lon_bin_stipple, lat_bin_stipple) %>%
+#   summarize(count = n(), .groups = "drop")
+# 
+# full_grid <- expand.grid(
+#   lon_bin_stipple = seq(-180, 175, by = stipple_resolution),
+#   lat_bin_stipple = seq(-90, 90, by = stipple_resolution)
+# ) %>%
+#   as_tibble()
+# 
+# # Fill in any missing bins with count = 0
+# argo_bins_full <- full_grid %>%
+#   left_join(argo_bins, by = c("lon_bin_stipple", "lat_bin_stipple")) %>%
+#   mutate(count = ifelse(is.na(count), 0, count))
+# 
+# # 2. Identify undersampled areas (e.g., fewer than 1 profile)
+# undersampled <- argo_bins_full %>% filter(count < 1)
+# 
+# # 3. Generate corner points for each undersampled grid cell (4 corners per cell)
+# undersampled_corners <- undersampled %>%
+#   rowwise() %>%
+#   mutate(corners = list(
+#     data.frame(
+#       LON = c(lon_bin_stipple,
+#               lon_bin_stipple + stipple_resolution,
+#               lon_bin_stipple,
+#               lon_bin_stipple + stipple_resolution),
+#       LAT = c(lat_bin_stipple,
+#               lat_bin_stipple,
+#               lat_bin_stipple + stipple_resolution,
+#               lat_bin_stipple + stipple_resolution)
+#     )
+#   )) %>%
+#   ungroup() %>%
+#   unnest(corners)
+# 
+# # 4. Filter the prediction grid to the desired season
+# world <- ne_countries(scale = "medium", returnclass = "sf")
+# 
+# 
+# annual_mean$poc_flux_annual_NA <- ifelse(df_plot$poc_flux_annual <= 0.05,NA,df_plot$poc_flux_annual)
+# 
+# poc_flux_map <- ggplot() +
+#   ## 1 ─────────────── POC‑flux background ──────────────────────────
+#   geom_tile(data = annual_mean,
+#             aes(LONGITUDE, LATITUDE, fill = poc_flux_annual_NA),
+#             alpha = 0.96) +
+#   scale_fill_viridis_b(
+#     name = "POC flux (mg C m⁻² day⁻¹)",
+#     breaks = c(0.1,0.5,1,2,5,7.5),
+#     limits = c(0.5,20 ),
+#     oob = scales::squish, na.value = "white") +                       # your viridis / magma scale object
+#   
+#   ## 2 ─────────────── White contours (same variable) ───────────────
+#   geom_contour(data = df_plot,
+#                aes(LONGITUDE, LATITUDE, z = poc_flux_annual,
+#                    colour = after_stat(level)),
+#                colour  = "white",   # fixed colour, so legend disabled below
+#                alpha   = 0.30,
+#                binwidth = 2.5,
+#                show.legend = FALSE) +
+#   
+#   ## 3 ─────────────── Stippling for undersampled grid cells ────────
+#   geom_point(data = undersampled_corners,
+#              aes(LON, LAT),
+#              colour = "red", size = 1.3, alpha = 0.7, shape = 20) +
+#   
+#   ## 4 ─────────────── Coastlines  ──────────────────────────────────
+#   geom_sf(data = world, fill = "lightgrey", colour = "lightgrey",
+#           linewidth = 0.3) +
+#   
+#   ## 5 ─────────────── Axes, ticks, labels, theme  ──────────────────
+#   coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = FALSE) +
+#   scale_x_continuous(breaks = ticks_x, labels = label_lon) +
+#   scale_y_continuous(breaks = ticks_y, labels = label_lat) +
+#   labs(
+#     title = "b • Average annual POC flux", # (assuming W = 50 m day⁻¹)
+#     x = "Longitude", y = "Latitude", fill = "POC flux\n(mg C m⁻² day⁻¹)"
+#   ) +
+#   theme_map(base_size = 18) +
+#   theme(
+#     legend.position   = "bottom",
+#     legend.direction  = "horizontal",
+#     legend.box        = "horizontal",
+#     legend.key.width  = unit(2.2, "cm"),
+#     legend.key.height = unit(0.5, "cm"))
+# 
+# shrink_margins <- theme(plot.margin = margin(5, 5, 5, 5))   # 5 pts all round
+# esp_plot        <- esp_plot        + shrink_margins
+# esp_region_plot <- esp_region_plot + shrink_margins
+# poc_flux_map    <- poc_flux_map    + shrink_margins
+# 
+# 
+# 
+# combined_fig <- (esp_plot |  poc_flux_map) +
+#   plot_layout(widths = c(1, 2),guides = "auto")
+# 
+# combined_fig_boyd <- (esp_plot_boyd |  poc_flux_map) +
+#   plot_layout(widths = c(1, 2),guides = "auto")
+# 
+# 
+# combined_fig_log <- (esp_plot_log10|  poc_flux_map )+
+#   plot_layout(widths = c(1, 2),guides = "auto")
+# 
+# ggsave(plot = combined_fig,
+#        "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map.png",
+#        width = 18,height = 10,dpi = 250)
+# 
+# ggsave(plot = combined_fig_log,
+#        "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map_log.png",
+#        width = 25,height = 10,dpi = 250)
+# 
+# combined_fig <- esp_plot_log10 | poc_flux_map
+# ggsave(plot = combined_fig,
+#        "../pubfig/fig5_ESP_export_rate_with_w_and_avg_POC_flux_map_log10.png",
+#        width = 19,height = 10,dpi = 400)
+# 
+# 
+# 
+# 

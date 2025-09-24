@@ -252,10 +252,18 @@ add_region <- function(df) {
   df %>% 
     mutate(
       region = case_when(
-        LATITUDE >  30 & between(LONGITUDE, -100,   20)             ~ "North Atlantic",
+        # Mediterranean Sea: roughly 30-46°N, 6°W-36°E
+        between(LATITUDE, 30, 46) & between(LONGITUDE, -6, 36)       ~ "Mediterranean",
+        # North Atlantic (excluding Mediterranean overlap)
+        LATITUDE >  30 & between(LONGITUDE, -100, 20) & 
+          !(between(LATITUDE, 30, 46) & between(LONGITUDE, -6, 36))  ~ "North Atlantic",
+        # North Pacific
         LATITUDE >  30 & (LONGITUDE < -100 | LONGITUDE > 120)       ~ "North Pacific",
+        # Northern Tropics
         LATITUDE >= 0 & LATITUDE <=  30                              ~ "Northern Tropics",
+        # Southern Tropics
         LATITUDE <   0 & LATITUDE >= -30                             ~ "Southern Tropics",
+        # Southern Ocean
         LATITUDE < -30                                               ~ "Southern Ocean",
         TRUE                                                         ~ NA_character_
       )
@@ -409,6 +417,12 @@ annual_export_region_list
 export_region <- annual_export_region_list %>% bind_rows(.id = "w")  
 export_region <- export_region %>% pivot_longer(cols=!c("region","w"))
 export_region <- export_region %>% group_by(name,w) %>% mutate(global_export=sum(value))
+
+names(sensitivity_results) <- w_values <- c(20,50,100,200,300,400,500)
+
+export_region <- annual_export_region_list %>% bind_rows(.id = "w")  
+
+write_csv(export_region,file = "../data/export_region.csv")
 
 saveRDS(object = export_region,file = "../data/sensitivity_region.Rds")
 saveRDS(object = sensitivity_results,file = "../data/sensitivity_res.Rds")

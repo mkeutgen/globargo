@@ -19,7 +19,7 @@ conflict_prefer("filter", "dplyr")
 
 
 # Source the functions required for the algorithm 
-source(file = "/data/GLOBARGO/src/02AnnexDetFunBBP700.R")
+source(file = "../OLD_script/02AnnexDetFunBBP700.R")
 
 
 # Function to downscale data without outlier detection
@@ -65,7 +65,7 @@ cycle_number <- 54
 list_plots <- list()
 
 # False positive in SPIC but not in SAL 
-wmo <- 1902455
+wmo <- 5904677
 cycle_number <- 37
 # Load data for the current float ('load_float_data' is an internal function to the OneArgo R toolbox)
 float_data <- load_float_data(
@@ -81,6 +81,8 @@ float_data <- load_float_data(
   ),
   format = "dataframe"
 )
+
+float_data %>% filter(float_data$CYCLE_NUMBER == 37) %>% pull(PRES_ADJUSTED) %>% unique()
 
 float_data_copy <- float_data %>% select(LATITUDE,LONGITUDE,TIME,CYCLE_NUMBER) %>% unique()
 float_data_copy$SUBD <- ifelse(float_data_copy$CYCLE_NUMBER == cycle_number,T,F)
@@ -359,11 +361,7 @@ for (i in seq_len(nrow(potential_eddy_events))) {
 }
 
 
-filtered_events <- potential_eddy_events %>%
-  filter(
-    AOU_gradient_sign_change == TRUE,
-    ABS_SAL_gradient_sign_change == TRUE)
-
+filtered_events <- potential_eddy_events
 # Initialize empty lists for plots
 prof_plot <- list()
 res_plot <- list()
@@ -418,8 +416,8 @@ for (i in seq_along(filtered_events$CYCLE_NUMBER)) {
     facet_wrap(. ~ VAR, scales = "free", labeller = labeller(VAR = var_labels)) +
     coord_flip() +
     scale_x_reverse(limits = c(600, 0), breaks = seq(0, 600, by = 200)) +
-    geom_line(aes(y = VALUE, color = "Observations"), size = 1.2) +
-    geom_point(aes(y = VALUE, color = "Observations"), size = 1.2) +
+    geom_line(aes(y = VALUE), size = 1.2, color = "black") +
+    geom_point(aes(y = VALUE), size = 1.2,color = "black") +
     theme_bw() +
     labs(x = "Adjusted Pressure (dbar)", y = "") +
     theme(
@@ -432,7 +430,7 @@ for (i in seq_along(filtered_events$CYCLE_NUMBER)) {
       legend.text = element_text(size = 25),
       legend.spacing = unit(3, "lines"),
     ) +
-    geom_vline(xintercept = 340, color = "darkgreen", alpha = 0.3, size = 1)  
+    geom_vline(xintercept = 340, color = "yellow", alpha = 0.4, size = 8)  
   
   
   
@@ -490,7 +488,7 @@ for (i in seq_along(filtered_events$CYCLE_NUMBER)) {
     top = text_grob(annotation_text, face = "bold", size = 10)
   )
   ggsave(plot = false_pos_in_spic_not_in_sal,
-         filename = "/data/GLOBARGO/src/figures/false_pos_in_spic.png",width = 18,height = 15)
+         filename = "/data/GLOBARGO/globargo_repo/pubfig/SI_false_pos_in_spic.png",width = 18,height = 15)
   
   list_plots[[i]] <- combined_plot
 }
