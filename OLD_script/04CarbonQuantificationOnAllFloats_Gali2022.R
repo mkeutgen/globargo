@@ -140,7 +140,7 @@ estimate_MLD <- function(PRES, TEMP, delta = 0.2) {
 # Function to compute a depth-dependent conversion factor profile and convert bbp700 to POC.
 poc_from_bbp700_depth_dependent <- function(bbp700, zvec, mld, region) {
   # Fixed parameters from Gula's method
-  c_value <- 12011       # asymptotic conversion factor at depth (mg C/m2)
+  c_value <- 12011       # asymptotic conversion factor at depth (mg C/m3)
   b <- -6.57             # exponential slope
   
   # Updated region-dependent surface layer depth (zsurf, in m)
@@ -153,10 +153,10 @@ poc_from_bbp700_depth_dependent <- function(bbp700, zvec, mld, region) {
   
   # Updated region-dependent surface conversion factor (a_plus_c)
   a_plus_c <- list(
-    NASPG = 41550,  # North Atlantic Subpolar Gyre (from Cetinic et al., 2012)
-    MED   = 41305,  # Mediterranean (from Loisel et al., 2001)
-    STG   = 58968,  # Subtropical Gyres (from Stramski et al., 2008)
-    SO    = 31200   # Southern Ocean (from Johnson et al., 2017)
+    NASPG = 41550,  # North Atlantic Subpolar Gyre (from Cetinic et al., 2012)  DOI: 10.1029/2011JC007771
+    MED   = 41305,  # Mediterranean (from Loisel et al., 2001) DOI: 10.1029/2001GL013863
+    STG   = 58968,  # Subtropical Gyres (from Stramski et al., 2008) DOI: 10.5194/bg-5-171-2008
+    SO    = 31200   # Southern Ocean (from Johnson et al., 2017) DOI:10.1002/2017JC012838
   )
   
   if (! region %in% names(zsurf_reg)) {

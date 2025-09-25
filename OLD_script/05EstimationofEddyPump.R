@@ -29,7 +29,7 @@ conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 
 Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
-setwd("/data/GLOBARGO/src/")
+
 # Read the data
 df_carbon_with_poc <- read_csv("data/df_carbon_subduction_anom_with_poc_fromgali.csv") %>% filter(integrated_poc > 0.01) 
 df_carbon_with_poc
@@ -37,7 +37,8 @@ df_argo_clean <- read_csv("data/df_argo_loc.csv")
 
 # Implementing Siegel's correction : 
 
-fseq_df <- read_csv("co2_sequestration_50years.csv")
+fseq_df <- read_csv("data/co2_sequestration_50years.csv")
+fseq_df$longitude %>% unique()
 fseq_df$fseq %>% summary()
 
 fseq_df <- fseq_df %>% na.omit()
@@ -487,8 +488,9 @@ ggsave(plot_esp,filename = "figures/sensitivity_ESP_magnitude.png",width=10,heig
 
 saveRDS(object = merged_df,"data/merged_dataset_poc_estim.Rds")
 
-merged_df <- readRDS("data/merged_dataset_poc_estim.Rds")
+merged_df <- readRDS("../merged_dataset_poc_estim.Rds")
 
+merged_df$poc_bl
 # POC flux assuming T = 4 days (mean speed of 50 m/s)
 # POC flux assuming w =  200 m / day (T = L/W)
 merged_df <- merged_df %>% mutate(poc_flux50w_bl = poc_bl * proportion * 1/4,
@@ -560,7 +562,7 @@ ggplot() +
   geom_point(data = undersampled_corners,
              aes(x = LON, y = LAT),
              color = "white", alpha = 1, size = 1, shape = 20) +
-  labs(title = paste("Average POC flux",sep = "",x = "Longitude", y = "Latitude")) +
+  labs(title = "Average POC flux") +
   scale_fill_viridis_b()+
   theme_minimal(base_size = 25) +  # Increased text size for readability
   theme(legend.position = 'top', 
@@ -671,9 +673,11 @@ plot_by_season_pocflux <- function(pred_grid, world_data, season_label, common_s
                                 label.position = "bottom")) }
   
   
-  ggsave(plot = yearly_plot,"figures/TimeSpaceVar/4SEASONS/poc_map_annual.png",width=18,height = 10)
   
-  p_djf <- plot_by_season_pocflux(
+
+ggsave(plot = yearly_plot,"figures/TimeSpaceVar/4SEASONS/poc_map_annual.png",width=18,height = 10)
+  
+p_djf <- plot_by_season_pocflux(
     pred_grid = merged_df, 
     world_data = world, 
     season_label = "DJF", 
@@ -772,8 +776,8 @@ plot_by_season_pocflux <- function(pred_grid, world_data, season_label, common_s
     
     # 5. Build the plot using the provided discrete scale (common_scale)
     ggplot() +
-      geom_tile(data = df_plot, aes(x = LONGITUDE, y = LATITUDE, fill = poc_flux3days50yrs)) +
-      geom_contour(data = df_plot, aes(x = LONGITUDE, y = LATITUDE, z = poc_flux3days50yrs),
+      geom_tile(data = df_plot, aes(x = LONGITUDE, y = LATITUDE, fill = poc_flux50w_50yrs_bl)) +
+      geom_contour(data = df_plot, aes(x = LONGITUDE, y = LATITUDE, z = poc_flux50w_50yrs_bl),
                    color = "white", alpha = 0.3,binwidth = 1) +
       geom_sf(data = world_data, fill = "white", color = "white", inherit.aes = FALSE) +
       coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = FALSE, crs = st_crs(4326)) +
