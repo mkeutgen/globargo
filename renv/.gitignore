@@ -1,0 +1,9 @@
+# Renv
+# See https://rstudio.github.io/renv/articles/renv.html for details.
+library/
+local/
+cellar/
+lock/
+python/
+sandbox/
+staging/

@@ -15,11 +15,11 @@ conflict_prefer("filter", "dplyr")
 
 
 # Source the annex functions
-source(file = "scripts/detection_algorithm_physical_subduction_annex_fun.R")
+source(file = "detection_algorithm_physical_subduction_annex_fun.R")
 
 
 # Read the list of WMO IDs you want to do anomaly detection on
-wmolist <- readRDS("fill_in")
+wmolist <- readRDS("../data/WMO_list.rds")
 
 # Initialize an empty list to store detected eddy events
 detected_events_list <- list()

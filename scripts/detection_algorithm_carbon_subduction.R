@@ -19,11 +19,11 @@ conflict_prefer("filter", "dplyr")
 
 
 # Source the functions required for the algorithm 
-source(file = "scripts/detection_algorithm_carbon_subduction_annex_fun.R")
+source(file = "detection_algorithm_carbon_subduction_annex_fun.R")
 
 
 # Read the manually classified dataframe
-classified_df <- read.csv("data/manual_classification.csv")
+classified_df <- read.csv("../data/manual_classification.csv")
 
 #Create two distinct df with high and low confidence subduction events
 cat1_events <- classified_df %>% filter(Category==1)
@@ -53,8 +53,7 @@ for (j in seq_along(wmo_cat1)) {
     wmo <- wmo_cat1[j]
     
     
-    # Restrict the cycle_number to the one found by the Detection Algorithm on AOU
-    # and SPIC to speed up the algorithm
+    # Restrict the profiles to those who contain physical subduction anomalies
     cycle_number <- cat1_events %>% filter(WMO== wmo) %>% select(CYCLE_NUMBER) %>% unique() %>% as_vector()
     
     
@@ -418,7 +417,8 @@ for (j in seq_along(wmo_cat1)) {
     
     # Save plots to files
     if (length(list_plots) > 0) {
-      dir <- paste0("/data/GLOBARGO/figures/CarbonFiguresCat1v2/", wmo)
+      # Note that a figures folder will be created out of the globargo_repo repository, this for constraints on Git tracked files
+      dir <- paste0("../../figures/CarbonFiguresCat1v2/", wmo)
       if (!dir.exists(dir)) {
         dir.create(dir, recursive = TRUE)
       }
@@ -438,9 +438,9 @@ for (j in seq_along(wmo_cat1)) {
 # Write output 
 detected.events.df.carbon <- detected_events_list_carbon %>% bind_rows()
 
-write_csv(detected.events.df.carbon,"/data/GLOBARGO/data/detected_events_unique_with_carbon_cat1.csv")
+write_csv(detected.events.df.carbon,"data/detected_events_unique_with_carbon_cat1.csv")
 
-# Copy of file above :
+# Copy of file above but I ran it on CAT2 events only
  
 # CARBON DETECTION ALGORITHM - CAT2 Events #
 # MK #
@@ -862,7 +862,7 @@ for (j in seq_along(wmo_cat2)) {
     
     # Save plots to files
     if (length(list_plots) > 0) {
-      dir <- paste0("/data/GLOBARGO/figures/CarbonFiguresCat2v2/", wmo)
+      dir <- paste0("../../figures/CarbonFiguresCat2v2/", wmo)
       if (!dir.exists(dir)) {
         dir.create(dir, recursive = TRUE)
       }
@@ -882,7 +882,7 @@ for (j in seq_along(wmo_cat2)) {
 # Write output 
 detected.events.df.carbon <- detected_events_list_carbon %>% bind_rows()
 
-write_csv(detected.events.df.carbon,"/data/GLOBARGO/data/detected_events_unique_with_carbon_cat2.csv")
+write_csv(detected.events.df.carbon,"data/detected_events_unique_with_carbon_cat2.csv")
 
 
 
