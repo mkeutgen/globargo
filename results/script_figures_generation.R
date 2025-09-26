@@ -438,13 +438,9 @@ subd_distrib_plot <- ggplot(combined_data_global,
   ) +
   labs(
     x     = "Depth (m)",
-<<<<<<< HEAD
-    y     = "Density"  ) +
-=======
     y     = "Density",
     title = ""
   ) +
->>>>>>> 9e67aa73f649f0aca85c1e01172ba8d6c7997b52
   scale_x_continuous(
     breaks  = seq(0, 1000, by = 200),
     labels  = seq(0, 1000, by = 200)

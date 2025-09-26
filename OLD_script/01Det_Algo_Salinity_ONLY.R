@@ -198,8 +198,8 @@ for (j in seq_along(wmolist)) {
       select(PRES_ADJUSTED, SCALE_RES_ROB,VALUE, VAR, CYCLE_NUMBER, LONGITUDE,
              LATITUDE, TIME) %>%
       pivot_wider(names_from = VAR, values_from = c(SCALE_RES_ROB,VALUE)) %>%
-      mutate(OUT_S = ifelse(abs(abs(SCALE_RES_ROB_ABS_SAL) > cutoff
-                            , 1, 0))
+      mutate(OUT_S = ifelse(abs(SCALE_RES_ROB_ABS_SAL) > cutoff,
+                            1, 0))
     
     
     # Identify potential eddy events
