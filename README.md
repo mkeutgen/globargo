@@ -23,7 +23,7 @@ code, notebooks, and processed data products used in the analysis.
 - **R**: ≥ 4.3 (tested with 4.3.3 on RHEL 8).
 - **System libraries**: installing `sf`, `terra`, and `rnaturalearth` typically requires GDAL/GEOS/PROJ development headers; consult your OS package manager if `renv::restore()` reports missing system dependencies.
 - **R packages** (automatically handled by `renv`): `tidyverse`, `gsw`, `oce`, `robustbase`, `zoo`, `ggpubr`, `segmented`, `pracma`, `mgcv`, `gratia`, `sf`, `ggspatial`, `rnaturalearth`, `patchwork`, `viridis`, `conflicted`, and others captured in `renv.lock`.
-- **OneArgo toolbox**: the detection scripts rely on `oneArgo::load_float_data()` to fetch BGC-Argo profiles. Install it from <https://github.com/NOAA-PMEL/OneArgo-R> and configure the data cache (e.g., set `options(oneArgo.data = "path/to/cache")`).
+- **OneArgo toolbox**: the detection scripts rely on `oneArgo::load_float_data()` to fetch BGC-Argo profiles. Install it from <https://github.com/NOAA-PMEL/OneArgo-R> .
 - **Python (optional)**: the notebook in `notebooks/` expects a recent Python 3 environment with `pandas`, `xarray`, `netCDF4`, and plotting libraries if you plan to re-run it.
 
 ## Environment management with `renv`
