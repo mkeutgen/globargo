@@ -1,3 +1,4 @@
+DOI 10.5281/zenodo.17236580
  # globargo
 repository for manuscript for BGC on global argo detection of eddy subduction pump
 
